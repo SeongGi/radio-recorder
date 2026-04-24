@@ -1,0 +1,57 @@
+---
+# 녹음 파일 저장용 PV/PVC
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: radio-recordings-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/radio-recordings    # Mac Mini 로컬 디스크 경로
+    type: DirectoryOrCreate
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radio-recordings-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: manual
+
+---
+# 데이터 저장용 PV/PVC (예약, 녹음 기록)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: radio-data-pv
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/radio-data
+    type: DirectoryOrCreate
+  storageClassName: manual
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radio-data-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: manual

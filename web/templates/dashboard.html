@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radio Recorder - 대시보드</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- 헤더 -->
+    <header class="header">
+        <div class="header-left">
+            <span class="header-logo">📻</span>
+            <h1 class="header-title">Radio Recorder</h1>
+        </div>
+        <div class="header-right">
+            <div class="user-info">
+                <img src="{{ user.picture or '' }}" alt="" class="user-avatar" onerror="this.style.display='none'">
+                <span class="user-name">{{ user.name or user.email }}</span>
+            </div>
+            <a href="/auth/logout" class="btn btn-ghost btn-sm">로그아웃</a>
+        </div>
+    </header>
+
+    <!-- 탭 네비게이션 -->
+    <nav class="tabs">
+        <button class="tab active" data-tab="stations">🏢 방송국</button>
+        <button class="tab" data-tab="schedules">📅 예약</button>
+        <button class="tab" data-tab="recording">🔴 녹음</button>
+        <button class="tab" data-tab="files">📁 파일</button>
+        <button class="tab" data-tab="settings">⚙️ 설정</button>
+    </nav>
+
+    <!-- 메인 컨텐츠 -->
+    <main class="content">
+
+        <!-- 방송국 탭 -->
+        <section class="tab-panel active" id="panel-stations">
+            <div class="section-header">
+                <h2>방송국 목록</h2>
+                <button class="btn btn-primary btn-sm" onclick="testAllStreams()">
+                    🔍 전체 스트림 테스트
+                </button>
+            </div>
+
+            <div class="network-group" id="stations-container">
+                <!-- JS에서 동적 렌더링 -->
+            </div>
+        </section>
+
+        <!-- 예약 탭 -->
+        <section class="tab-panel" id="panel-schedules">
+            <div class="section-header">
+                <h2>예약 녹음</h2>
+                <button class="btn btn-primary" onclick="showAddScheduleModal()">
+                    ➕ 새 예약
+                </button>
+            </div>
+
+            <div class="schedule-list" id="schedule-list">
+                <!-- JS에서 동적 렌더링 -->
+            </div>
+        </section>
+
+        <!-- 녹음 탭 -->
+        <section class="tab-panel" id="panel-recording">
+            <div class="section-header">
+                <h2>녹음 현황</h2>
+            </div>
+
+            <!-- 즉시 녹음 -->
+            <div class="card quick-record">
+                <h3>⚡ 즉시 녹음</h3>
+                <div class="quick-record-form">
+                    <select id="quick-station" class="input">
+                        <option value="">방송국 선택...</option>
+                    </select>
+                    <input type="number" id="quick-duration" class="input" value="60"
+                           min="1" max="360" placeholder="분">
+                    <button class="btn btn-danger" onclick="startQuickRecording()">
+                        🔴 녹음 시작
+                    </button>
+                </div>
+            </div>
+
+            <!-- 진행 중인 녹음 -->
+            <div id="active-recordings">
+                <!-- JS에서 동적 렌더링 -->
+            </div>
+        </section>
+
+        <!-- 파일 탭 -->
+        <section class="tab-panel" id="panel-files">
+            <div class="section-header">
+                <h2>녹음 파일</h2>
+                <button class="btn btn-ghost btn-sm" onclick="loadFiles()">🔄 새로고침</button>
+            </div>
+
+            <div class="file-list" id="file-list">
+                <!-- JS에서 동적 렌더링 -->
+            </div>
+        </section>
+
+        <!-- 설정 탭 -->
+        <section class="tab-panel" id="panel-settings">
+            <div class="section-header">
+                <h2>설정</h2>
+            </div>
+
+            <!-- RSS 피드 -->
+            <div class="card">
+                <h3>🎙️ Podcast RSS 피드</h3>
+                <p class="text-muted">팟캐스트 앱에서 아래 URL을 구독하세요.</p>
+
+                <div class="setting-row" style="margin-top: 16px;">
+                    <label>전체 피드</label>
+                    <div class="feed-url-row">
+                        <input type="text" class="input" id="rss-all-url" readonly>
+                        <button class="btn btn-ghost btn-sm" onclick="copyFeedUrl('rss-all-url')">📋 복사</button>
+                    </div>
+                </div>
+
+                <div id="rss-station-urls" style="margin-top: 12px;">
+                    <!-- JS에서 동적 렌더링 -->
+                </div>
+            </div>
+
+            <!-- 스트림 테스트 -->
+            <div class="card" style="margin-top: 16px;">
+                <h3>📡 스트림 상태</h3>
+                <p class="text-muted">각 방송국의 스트림 연결 상태를 테스트합니다.</p>
+                <div id="stream-test-results" style="margin-top: 16px;">
+                    <!-- JS에서 동적 렌더링 -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 예약 추가 모달 -->
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModal()">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title">새 예약 추가</h3>
+                <button class="btn btn-ghost btn-sm" onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>방송국</label>
+                    <select id="sched-station" class="input">
+                        <option value="">선택...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>라벨 (선택)</label>
+                    <input type="text" id="sched-label" class="input" placeholder="예: 아침 클래식">
+                </div>
+
+                <div class="form-group">
+                    <label>요일</label>
+                    <div class="day-selector">
+                        <label class="day-chip"><input type="checkbox" value="mon"> 월</label>
+                        <label class="day-chip"><input type="checkbox" value="tue"> 화</label>
+                        <label class="day-chip"><input type="checkbox" value="wed"> 수</label>
+                        <label class="day-chip"><input type="checkbox" value="thu"> 목</label>
+                        <label class="day-chip"><input type="checkbox" value="fri"> 금</label>
+                        <label class="day-chip"><input type="checkbox" value="sat"> 토</label>
+                        <label class="day-chip"><input type="checkbox" value="sun"> 일</label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>시작 시간</label>
+                        <input type="time" id="sched-time" class="input" value="07:00">
+                    </div>
+                    <div class="form-group">
+                        <label>녹음 시간 (분)</label>
+                        <input type="number" id="sched-duration" class="input" value="120" min="1" max="720">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal()">취소</button>
+                <button class="btn btn-primary" onclick="saveSchedule()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 알림 -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

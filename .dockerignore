@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.env
+.venv
+venv
+node_modules
+k8s/
+*.md
+.DS_Store
+recordings/
+data/

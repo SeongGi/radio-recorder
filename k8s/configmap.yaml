@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: radio-recorder-config
+data:
+  config.yaml: |
+    server:
+      host: "0.0.0.0"
+      port: 8080
+      secret_key: "change-me-to-random-secret-key"
+
+    recording:
+      output_dir: "/app/recordings"
+      format: "mp3"
+      bitrate: "192k"
+      sample_rate: 44100
+      max_retries: 3
+
+    auth:
+      google_client_id: ""
+      google_client_secret: ""
+      allowed_emails:
+        - "your.email@gmail.com"
+      rss_token: ""
+
+    ad_detection:
+      enabled: false
+      silence_threshold_db: -40
+      silence_min_duration: 0.5
+      loudness_jump_threshold: 6
+
+    stations:
+      kbs_1radio:
+        name: "KBS 1라디오"
+        network: "KBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "kbs"
+          ch: "1radio"
+      kbs_2radio:
+        name: "KBS 2라디오 (해피FM)"
+        network: "KBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "kbs"
+          ch: "2radio"
+      kbs_classic:
+        name: "KBS 클래식FM"
+        network: "KBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "kbs"
+          ch: "1fm"
+      kbs_cool:
+        name: "KBS 쿨FM"
+        network: "KBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "kbs"
+          ch: "2fm"
+      mbc_standard:
+        name: "MBC 표준FM"
+        network: "MBC"
+        stream_source: "bsod"
+        stream_params:
+          stn: "mbc"
+          ch: "sfm"
+      mbc_fm4u:
+        name: "MBC FM4U"
+        network: "MBC"
+        stream_source: "bsod"
+        stream_params:
+          stn: "mbc"
+          ch: "mfm"
+      mbc_allmusic:
+        name: "MBC 올댓뮤직"
+        network: "MBC"
+        stream_source: "bsod"
+        stream_params:
+          stn: "mbc"
+          ch: "chm"
+      sbs_power:
+        name: "SBS 파워FM"
+        network: "SBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "sbs"
+          ch: "powerfm"
+      sbs_love:
+        name: "SBS 러브FM"
+        network: "SBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "sbs"
+          ch: "lovefm"
+
+    schedules: []

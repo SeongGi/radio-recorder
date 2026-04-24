@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radio-recorder
+  labels:
+    app: radio-recorder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radio-recorder
+  template:
+    metadata:
+      labels:
+        app: radio-recorder
+    spec:
+      containers:
+        - name: radio-recorder
+          image: radio-recorder:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: recordings
+              mountPath: /app/recordings
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+          envFrom:
+            - secretRef:
+                name: radio-recorder-oauth
+                optional: true
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /auth/status
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /auth/status
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: recordings
+          persistentVolumeClaim:
+            claimName: radio-recordings-pvc
+        - name: data
+          persistentVolumeClaim:
+            claimName: radio-data-pvc
+        - name: config
+          configMap:
+            name: radio-recorder-config

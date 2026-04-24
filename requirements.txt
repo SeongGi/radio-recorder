@@ -1,0 +1,9 @@
+flask>=3.0
+apscheduler>=3.10
+pyyaml>=6.0
+requests>=2.31
+pydub>=0.25
+feedgen>=1.0
+authlib>=1.3
+python-dotenv>=1.0
+gunicorn>=22.0

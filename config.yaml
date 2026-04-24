@@ -1,0 +1,120 @@
+# ===================================================
+# Radio Recorder 설정 파일
+# ===================================================
+
+# 웹 서버
+server:
+  host: "0.0.0.0"
+  port: 8080
+  secret_key: "change-me-to-random-secret-key"
+
+# 녹음 설정
+recording:
+  output_dir: "/app/recordings"     # 컨테이너 내 경로 (k8s PV 마운트)
+  format: "mp3"
+  bitrate: "192k"
+  sample_rate: 44100
+  max_retries: 3
+
+# 인증 (Google OAuth 2.0)
+auth:
+  google_client_id: ""              # GCP Console에서 발급
+  google_client_secret: ""          # GCP Console에서 발급
+  allowed_emails:
+    - "your.email@gmail.com"        # 접근 허용할 이메일
+  rss_token: ""                     # 자동 생성됨 (최초 실행 시)
+
+# 광고 감지 (실험적)
+ad_detection:
+  enabled: false
+  silence_threshold_db: -40         # 무음 판단 기준 (dB)
+  silence_min_duration: 0.5         # 최소 무음 길이 (초)
+  loudness_jump_threshold: 6        # LUFS 변화 임계값
+
+# 방송국 정의
+# 새 방송국 추가: 아래 형식으로 항목 추가
+stations:
+  # ─── KBS ───
+  kbs_1radio:
+    name: "KBS 1라디오"
+    network: "KBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "kbs"
+      ch: "1radio"
+
+  kbs_2radio:
+    name: "KBS 2라디오 (해피FM)"
+    network: "KBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "kbs"
+      ch: "2radio"
+
+  kbs_classic:
+    name: "KBS 클래식FM"
+    network: "KBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "kbs"
+      ch: "1fm"
+
+  kbs_cool:
+    name: "KBS 쿨FM"
+    network: "KBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "kbs"
+      ch: "2fm"
+
+  # ─── MBC ───
+  mbc_standard:
+    name: "MBC 표준FM"
+    network: "MBC"
+    stream_source: "bsod"
+    stream_params:
+      stn: "mbc"
+      ch: "sfm"
+
+  mbc_fm4u:
+    name: "MBC FM4U"
+    network: "MBC"
+    stream_source: "bsod"
+    stream_params:
+      stn: "mbc"
+      ch: "mfm"
+
+  mbc_allmusic:
+    name: "MBC 올댓뮤직"
+    network: "MBC"
+    stream_source: "bsod"
+    stream_params:
+      stn: "mbc"
+      ch: "chm"
+
+  # ─── SBS ───
+  sbs_power:
+    name: "SBS 파워FM"
+    network: "SBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "sbs"
+      ch: "powerfm"
+
+  sbs_love:
+    name: "SBS 러브FM"
+    network: "SBS"
+    stream_source: "bsod"
+    stream_params:
+      stn: "sbs"
+      ch: "lovefm"
+
+# 예약 목록 (웹 UI에서 관리, 직접 편집도 가능)
+schedules: []
+# 예시:
+# - id: "morning_classic"
+#   station_id: "kbs_classic"
+#   days: ["mon", "tue", "wed", "thu", "fri"]
+#   start_time: "07:00"
+#   duration_minutes: 120
+#   enabled: true

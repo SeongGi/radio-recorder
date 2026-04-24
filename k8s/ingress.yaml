@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radio-recorder
+  labels:
+    app: radio-recorder
+  annotations:
+    # Traefik (k3d 기본)
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # nginx-ingress 사용 시 아래 주석 해제
+    # nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  # TLS 설정 (Cloudflare Tunnel 사용 시 불필요)
+  # tls:
+  #   - hosts:
+  #       - radio.your-domain.com
+  #     secretName: radio-tls
+  rules:
+    - host: radio.your-domain.com   # ← 실제 도메인으로 변경
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: radio-recorder
+                port:
+                  number: 8080
