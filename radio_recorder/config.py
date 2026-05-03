@@ -35,6 +35,15 @@ DEFAULT_CONFIG = {
         "silence_min_duration": 0.5,
         "loudness_jump_threshold": 6,
     },
+    "storage": {
+        "nas": {
+            "server": "",
+            "share": "",
+            "username": "",
+            "password": "",
+            "remote_dir": "/",
+        }
+    },
     "stations": {},
     "schedules": [],
 }
@@ -130,11 +139,11 @@ class Config:
 
     @property
     def google_client_id(self) -> str:
-        return self._data["auth"]["google_client_id"]
+        return os.environ.get("GOOGLE_CLIENT_ID") or self._data["auth"].get("google_client_id", "")
 
     @property
     def google_client_secret(self) -> str:
-        return self._data["auth"]["google_client_secret"]
+        return os.environ.get("GOOGLE_CLIENT_SECRET") or self._data["auth"].get("google_client_secret", "")
 
     @property
     def allowed_emails(self) -> list:
@@ -148,9 +157,36 @@ class Config:
     def ad_detection_enabled(self) -> bool:
         return self._data["ad_detection"]["enabled"]
 
+    def set_ad_detection_enabled(self, value: bool):
+        """광고 감지 활성화/비활성화 설정 및 저장"""
+        self._data["ad_detection"]["enabled"] = value
+        self.save()
+
     @property
     def ad_detection_config(self) -> dict:
         return self._data["ad_detection"]
+
+    @property
+    def nas_config(self) -> dict:
+        return self._data.get("storage", {}).get("nas", {})
+
+    def set_nas_config(self, nas_data: dict):
+        """NAS 설정을 저장합니다."""
+        if "storage" not in self._data:
+            self._data["storage"] = {}
+        self._data["storage"]["nas"] = nas_data
+        self.save()
+
+    @property
+    def drive_config(self) -> dict:
+        return self._data.get("storage", {}).get("drive", {"folder": "Radio Recordings"})
+
+    def set_drive_config(self, drive_data: dict):
+        """Drive 설정을 저장합니다."""
+        if "storage" not in self._data:
+            self._data["storage"] = {}
+        self._data["storage"]["drive"] = drive_data
+        self.save()
 
     @property
     def stations(self) -> dict:
@@ -185,7 +221,7 @@ class Config:
         if "auth" in safe:
             safe["auth"] = {
                 "allowed_emails": safe["auth"].get("allowed_emails", []),
-                "has_google_oauth": bool(safe["auth"].get("google_client_id")),
+                "has_google_oauth": bool(self.google_client_id),
                 "rss_token": safe["auth"].get("rss_token", ""),
             }
         return safe

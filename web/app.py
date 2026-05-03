@@ -5,19 +5,22 @@ Flask 웹 서버
 
 import os
 import uuid
+import shutil
 import logging
+import requests
 from datetime import datetime
 from flask import (
     Flask, render_template, request, jsonify,
-    send_from_directory, session, redirect, url_for
+    send_from_directory, session, redirect, url_for, Response, stream_with_context
 )
 
 from web.auth import init_oauth, login_required, check_rss_token, register_auth_routes
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
+def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_tracker=None):
     """Flask 앱을 생성합니다."""
 
     app = Flask(
@@ -26,7 +29,12 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
     )
 
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=2, x_proto=2, x_host=2, x_prefix=2)
+
     app.secret_key = config.secret_key
+    from datetime import timedelta
+    app.permanent_session_lifetime = timedelta(days=30)
 
     # Google OAuth 초기화
     init_oauth(app, config)
@@ -42,6 +50,18 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
         if user:
             return redirect(url_for("dashboard"))
         return render_template("login.html")
+
+    @app.route("/play/<file_id>")
+    def play_page(file_id):
+        """별도 재생 페이지"""
+        if not file_tracker:
+            return "Tracker not initialized", 500
+        
+        meta = file_tracker.get_file(file_id)
+        if not meta:
+            return "File not found", 404
+            
+        return render_template("player.html", meta=meta)
 
     @app.route("/dashboard")
     @login_required
@@ -182,7 +202,377 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
     @login_required
     def api_files():
         """녹음 파일 목록"""
+        if file_tracker:
+            # DB 동기화 후 반환
+            file_tracker.sync_with_local_dir(config.recording_dir)
+            files = file_tracker.get_all_files()
+            # UI 호환성을 위해 relative_path 추가
+            for f in files:
+                f["relative_path"] = f["filename"]
+                f["size_mb"] = round(f.get("size_bytes", 0) / (1024 * 1024), 2)
+            return jsonify(files)
         return jsonify(recorder.get_recording_files())
+
+    @app.route("/api/files", methods=["DELETE"])
+    @login_required
+    def api_delete_files():
+        """파일 삭제 (단일/다중)"""
+        data = request.json
+        paths = data.get("paths", [])
+        if not paths:
+            return jsonify({"error": "삭제할 파일을 선택하세요"}), 400
+
+        deleted = []
+        errors = []
+        recording_dir = config.recording_dir
+
+        for rel_path in paths:
+            # Tracker에서 메타데이터 찾기
+            meta = None
+            if file_tracker:
+                meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+
+            # 로컬 파일인 경우
+            if not meta or meta.get("status") == "LOCAL":
+                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
+                if not full_path.startswith(os.path.normpath(recording_dir)):
+                    errors.append(f"잘못된 경로: {rel_path}")
+                    continue
+
+                if os.path.exists(full_path):
+                    try:
+                        os.remove(full_path)
+                        deleted.append(rel_path)
+                        if file_tracker and meta:
+                            file_tracker.delete_file(meta["id"])
+                    except Exception as e:
+                        errors.append(f"{rel_path}: {e}")
+                else:
+                    # 파일은 없지만 Tracker에는 있을 수 있음
+                    if file_tracker and meta:
+                        file_tracker.delete_file(meta["id"])
+                        deleted.append(rel_path)
+                    else:
+                        errors.append(f"파일 없음: {rel_path}")
+            else:
+                # NAS나 Drive의 경우 원격 삭제 로직 (일단 메타데이터만 삭제 처리)
+                if file_tracker and meta:
+                    file_tracker.delete_file(meta["id"])
+                    deleted.append(rel_path)
+
+        return jsonify({"deleted": deleted, "errors": errors})
+
+    # =====================
+    # NAS 연동 (SMB)
+    # =====================
+
+    @app.route("/api/storage/nas", methods=["GET"])
+    @login_required
+    def api_nas_config():
+        """NAS 설정 조회"""
+        nas = config.nas_config
+        return jsonify({
+            "server": nas.get("server", ""),
+            "share": nas.get("share", ""),
+            "username": nas.get("username", ""),
+            "password": "***" if nas.get("password") else "",
+            "remote_dir": nas.get("remote_dir", "/"),
+        })
+
+    @app.route("/api/storage/nas", methods=["POST"])
+    @login_required
+    def api_nas_config_save():
+        """NAS 설정 저장"""
+        data = request.json
+        current = config.nas_config
+        nas_data = {
+            "server": data.get("server", ""),
+            "share": data.get("share", ""),
+            "username": data.get("username", ""),
+            "password": data.get("password", "") if data.get("password") != "***" else current.get("password", ""),
+            "remote_dir": data.get("remote_dir", "/"),
+        }
+        config.set_nas_config(nas_data)
+        return jsonify({"success": True})
+
+    @app.route("/api/storage/drive", methods=["GET"])
+    @login_required
+    def api_drive_config():
+        """Drive 설정 조회"""
+        return jsonify(config.drive_config)
+
+    @app.route("/api/storage/drive", methods=["POST"])
+    @login_required
+    def api_drive_config_save():
+        """Drive 설정 저장"""
+        data = request.json
+        drive_data = {
+            "folder": data.get("folder", "Radio Recordings"),
+        }
+        config.set_drive_config(drive_data)
+        return jsonify({"success": True})
+
+    @app.route("/api/storage/nas/stream/<file_id>")
+    def api_nas_stream(file_id):
+        """NAS 파일 스트리밍"""
+        if not file_tracker:
+            return "File tracker not initialized", 500
+            
+        meta = file_tracker.get_file(file_id)
+        if not meta or meta.get("status") != "NAS":
+            return "File not found on NAS", 404
+            
+        nas = config.nas_config
+        if not nas.get("server") or not nas.get("share"):
+            return "NAS not configured", 500
+
+        try:
+            from smbprotocol.connection import Connection
+            from smbprotocol.session import Session
+            from smbprotocol.tree import TreeConnect
+            from smbprotocol.open import Open, CreateDisposition, FileAttributes, \
+                ShareAccess, CreateOptions, FilePipePrinterAccessMask
+
+            conn = Connection(uuid.uuid4(), nas["server"], 445)
+            conn.connect()
+            sess = Session(conn, nas.get("username", ""), nas.get("password", ""))
+            sess.connect()
+            tree = TreeConnect(sess, f"\\\\{nas['server']}\\{nas['share']}")
+            tree.connect()
+
+            filename = os.path.basename(meta["filename"])
+            remote_dir = nas.get("remote_dir", "/").replace("/", "\\").strip("\\")
+            remote_path = f"{remote_dir}\\{filename}" if remote_dir else filename
+
+            file_open = Open(tree, remote_path)
+            file_open.create(
+                desired_access=FilePipePrinterAccessMask.GENERIC_READ,
+                file_attributes=FileAttributes.FILE_ATTRIBUTE_NORMAL,
+                share_access=ShareAccess.FILE_SHARE_READ,
+                create_disposition=CreateDisposition.FILE_OPEN,
+                create_options=CreateOptions.FILE_NON_DIRECTORY_FILE,
+            )
+
+            def generate():
+                try:
+                    offset = 0
+                    while True:
+                        chunk = file_open.read(offset, 65536)
+                        if not chunk:
+                            break
+                        yield chunk
+                        offset += len(chunk)
+                finally:
+                    file_open.close()
+                    tree.disconnect()
+                    conn.disconnect()
+
+            return Response(stream_with_context(generate()), mimetype="audio/mpeg")
+
+        except Exception as e:
+            logger.error(f"NAS Stream Error: {e}")
+            return f"Error connecting to NAS: {e}", 502
+
+    @app.route("/api/storage/nas/test", methods=["POST"])
+    @login_required
+    def api_nas_test():
+        """NAS 연결 테스트"""
+        nas = config.nas_config
+        if not nas.get("server") or not nas.get("share"):
+            return jsonify({"success": False, "error": "NAS 설정이 없습니다"}), 400
+        try:
+            from smbprotocol.connection import Connection
+            from smbprotocol.session import Session
+
+            conn = Connection(uuid.uuid4(), nas["server"], 445)
+            conn.connect()
+            s = Session(conn, nas.get("username", ""), nas.get("password", ""))
+            s.connect()
+            conn.disconnect()
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)})
+
+    @app.route("/api/storage/nas/transfer", methods=["POST"])
+    @login_required
+    def api_nas_transfer():
+        """NAS로 파일 전송 (복사/이동)"""
+        data = request.json
+        paths = data.get("paths", [])
+        action = data.get("action", "copy")  # copy or move
+
+        nas = config.nas_config
+        if not nas.get("server") or not nas.get("share"):
+            return jsonify({"error": "NAS 설정을 먼저 완료하세요"}), 400
+
+        recording_dir = config.recording_dir
+        transferred = []
+        errors = []
+
+        try:
+            from smbprotocol.connection import Connection
+            from smbprotocol.session import Session
+            from smbprotocol.tree import TreeConnect
+            from smbprotocol.open import Open, CreateDisposition, FileAttributes, \
+                ShareAccess, CreateOptions, FilePipePrinterAccessMask
+
+            conn = Connection(uuid.uuid4(), nas["server"], 445)
+            conn.connect()
+            sess = Session(conn, nas.get("username", ""), nas.get("password", ""))
+            sess.connect()
+            tree = TreeConnect(sess, f"\\\\{nas['server']}\\{nas['share']}")
+            tree.connect()
+
+            remote_dir = nas.get("remote_dir", "/").replace("/", "\\").strip("\\")
+
+            for rel_path in paths:
+                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
+                if not full_path.startswith(os.path.normpath(recording_dir)):
+                    errors.append(f"잘못된 경로: {rel_path}")
+                    continue
+
+                if not os.path.exists(full_path):
+                    errors.append(f"파일 없음: {rel_path}")
+                    continue
+
+                try:
+                    filename = os.path.basename(rel_path)
+                    remote_path = f"{remote_dir}\\{filename}" if remote_dir else filename
+
+                    file_open = Open(tree, remote_path)
+                    file_open.create(
+                        desired_access=FilePipePrinterAccessMask.GENERIC_WRITE,
+                        file_attributes=FileAttributes.FILE_ATTRIBUTE_NORMAL,
+                        share_access=ShareAccess.FILE_SHARE_WRITE,
+                        create_disposition=CreateDisposition.FILE_OVERWRITE_IF,
+                        create_options=CreateOptions.FILE_NON_DIRECTORY_FILE,
+                    )
+
+                    with open(full_path, "rb") as f:
+                        offset = 0
+                        while True:
+                            chunk = f.read(65536)
+                            if not chunk:
+                                break
+                            file_open.write(chunk, offset=offset)
+                            offset += len(chunk)
+
+                    file_open.close()
+                    transferred.append(rel_path)
+
+                    if action == "move":
+                        os.remove(full_path)
+                        if file_tracker:
+                            # Tracker에서 해당 파일 찾아서 상태 업데이트
+                            meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                            if meta:
+                                file_tracker.update_status(meta["id"], "NAS")
+
+                except Exception as e:
+                    errors.append(f"{rel_path}: {e}")
+
+            tree.disconnect()
+            conn.disconnect()
+
+        except Exception as e:
+            return jsonify({"error": f"NAS 연결 실패: {e}"}), 502
+
+        return jsonify({
+            "transferred": transferred,
+            "errors": errors,
+            "action": action,
+        })
+
+    # =====================
+    # Google Drive 연동
+    # =====================
+
+    @app.route("/api/storage/drive/upload", methods=["POST"])
+    @login_required
+    def api_drive_upload():
+        """Google Drive로 파일 업로드"""
+        data = request.json
+        paths = data.get("paths", [])
+        folder_name = data.get("folder", "Radio Recordings")
+
+        access_token = session.get("google_access_token")
+        if not access_token:
+            return jsonify({"error": "Google Drive 인증이 필요합니다. 재로그인 해주세요."}), 401
+
+        recording_dir = config.recording_dir
+        uploaded = []
+        errors = []
+
+        try:
+            from google.oauth2.credentials import Credentials
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload
+
+            creds = Credentials(
+                token=access_token,
+                refresh_token=session.get("google_refresh_token"),
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=config.google_client_id,
+                client_secret=config.google_client_secret,
+            )
+            service = build("drive", "v3", credentials=creds)
+
+            # 폴더 찾기 또는 생성
+            folder_query = (
+                f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
+                f"and trashed=false"
+            )
+            results = service.files().list(q=folder_query, fields="files(id)").execute()
+            folders = results.get("files", [])
+
+            if folders:
+                folder_id = folders[0]["id"]
+            else:
+                folder_metadata = {
+                    "name": folder_name,
+                    "mimeType": "application/vnd.google-apps.folder",
+                }
+                folder = service.files().create(body=folder_metadata, fields="id").execute()
+                folder_id = folder["id"]
+
+            for rel_path in paths:
+                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
+                if not full_path.startswith(os.path.normpath(recording_dir)):
+                    errors.append(f"잘못된 경로: {rel_path}")
+                    continue
+
+                if not os.path.exists(full_path):
+                    errors.append(f"파일 없음: {rel_path}")
+                    continue
+
+                try:
+                    filename = os.path.basename(rel_path)
+                    file_metadata = {
+                        "name": filename,
+                        "parents": [folder_id],
+                    }
+                    media = MediaFileUpload(full_path, mimetype="audio/mpeg", resumable=True)
+                    drive_file = service.files().create(
+                        body=file_metadata, media_body=media, fields="id, webViewLink"
+                    ).execute()
+                    
+                    uploaded.append(rel_path)
+                    
+                    # 업로드 성공 후 로컬 파일 삭제 (이동 처리)
+                    os.remove(full_path)
+                    
+                    # Tracker 업데이트
+                    if file_tracker:
+                        meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                        if meta:
+                            file_tracker.update_status(meta["id"], "DRIVE", drive_url=drive_file.get("webViewLink"))
+                except Exception as e:
+                    errors.append(f"{rel_path}: {e}")
+
+        except Exception as e:
+            return jsonify({"error": f"Google Drive 오류: {e}"}), 500
+
+        return jsonify({"uploaded": uploaded, "errors": errors})
 
     @app.route("/api/streams/test")
     @login_required
@@ -205,12 +595,102 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
         """설정 정보 (민감 정보 제외)"""
         return jsonify(config.to_dict())
 
+    @app.route("/api/ad-detection")
+    @login_required
+    def api_ad_detection_status():
+        """광고 감지 설정 상태"""
+        return jsonify({
+            "enabled": config.ad_detection_enabled,
+            "config": {
+                "silence_threshold_db": config.ad_detection_config.get("silence_threshold_db", -40),
+                "silence_min_duration": config.ad_detection_config.get("silence_min_duration", 0.5),
+                "loudness_jump_threshold": config.ad_detection_config.get("loudness_jump_threshold", 6),
+            },
+        })
+
+    @app.route("/api/ad-detection/toggle", methods=["POST"])
+    @login_required
+    def api_ad_detection_toggle():
+        """광고 감지 활성화/비활성화 토글"""
+        current = config.ad_detection_enabled
+        new_state = not current
+        config.set_ad_detection_enabled(new_state)
+
+        # Recorder의 ad_detector도 동기화
+        if new_state and recorder._ad_detector is None:
+            from radio_recorder.ad_detector import AdDetector
+            recorder._ad_detector = AdDetector(config.ad_detection_config)
+        elif not new_state:
+            recorder._ad_detector = None
+
+        return jsonify({"enabled": new_state})
+
     @app.route("/api/feed-urls")
     @login_required
     def api_feed_urls():
         """RSS 피드 URL 목록"""
         base_url = request.host_url.rstrip("/")
         return jsonify(podcast_feed.get_feed_urls(base_url))
+
+    @app.route("/api/stream-url/<station_id>")
+    @login_required
+    def api_stream_url(station_id):
+        """라이브 스트림 URL 반환 (클라이언트 직접 재생용)"""
+        station = config.get_station(station_id)
+        if not station:
+            return jsonify({"error": "알 수 없는 방송국"}), 400
+        try:
+            stream_info = stream_resolver.resolve(station)
+            return jsonify({
+                "url": stream_info["url"],
+                "name": station["name"],
+                "source": stream_info.get("source", ""),
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/stream/<station_id>")
+    @login_required
+    def live_stream_proxy(station_id):
+        """라이브 라디오 스트림 프록시 (오디오 바이트를 중계)"""
+        station = config.get_station(station_id)
+        if not station:
+            return jsonify({"error": "알 수 없는 방송국"}), 404
+        try:
+            stream_info = stream_resolver.resolve(station)
+            stream_url = stream_info["url"]
+            referer = stream_info.get("referer", "")
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (compatible; RadioRecorder/1.0)",
+                "Icy-MetaData": "0",
+            }
+            if referer:
+                headers["Referer"] = referer
+
+            upstream = requests.get(stream_url, stream=True, timeout=10, headers=headers)
+
+            content_type = upstream.headers.get("Content-Type", "audio/mpeg")
+
+            def generate():
+                try:
+                    for chunk in upstream.iter_content(chunk_size=4096):
+                        if chunk:
+                            yield chunk
+                except Exception:
+                    pass
+
+            return Response(
+                stream_with_context(generate()),
+                content_type=content_type,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        except Exception as e:
+            logger.error(f"라이브 스트림 오류 [{station_id}]: {e}")
+            return jsonify({"error": str(e)}), 502
 
     # =====================
     # 파일 다운로드
@@ -247,6 +727,26 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed):
         )
 
         return xml, 200, {"Content-Type": "application/rss+xml; charset=utf-8"}
+
+    # =====================
+    # PWA
+    # =====================
+
+    @app.route("/manifest.json")
+    def pwa_manifest():
+        return send_from_directory(
+            os.path.join(os.path.dirname(__file__), "static"),
+            "manifest.json",
+            mimetype="application/manifest+json",
+        )
+
+    @app.route("/sw.js")
+    def pwa_sw():
+        return send_from_directory(
+            os.path.join(os.path.dirname(__file__), "static"),
+            "sw.js",
+            mimetype="application/javascript",
+        )
 
     # =====================
     # 에러 핸들러

@@ -124,18 +124,43 @@ def cmd_run_server(config):
     from radio_recorder.recorder import Recorder
     from radio_recorder.scheduler import RecordingScheduler
     from radio_recorder.podcast_feed import PodcastFeed
+    from radio_recorder.file_tracker import FileTracker
     from web.app import create_app
+
+    from radio_recorder.storage import StorageManager
+    import json
 
     logger = logging.getLogger("radio_recorder")
 
     # 핵심 모듈 초기화
     resolver = StreamResolver()
-    recorder = Recorder(config)
+    
+    file_tracker = FileTracker("data")
+    file_tracker.sync_with_local_dir(config.recording_dir)
+    
+    storage_manager = StorageManager(config, file_tracker)
+    recorder = Recorder(config, file_tracker=file_tracker)
+    
+    # Recorder에 저장소 관리자 및 토큰 획득 함수 등록
+    recorder.storage_manager = storage_manager
+    
+    def get_refresh_token():
+        try:
+            token_path = os.path.join("data", "google_tokens.json")
+            if os.path.exists(token_path):
+                with open(token_path, "r") as f:
+                    return json.load(f).get("refresh_token")
+        except Exception:
+            pass
+        return None
+    
+    recorder.get_refresh_token_func = get_refresh_token
+
     scheduler = RecordingScheduler(config, resolver, recorder)
     podcast = PodcastFeed(config)
 
     # Flask 앱 생성
-    app = create_app(config, resolver, recorder, scheduler, podcast)
+    app = create_app(config, stream_resolver=resolver, recorder=recorder, scheduler=scheduler, podcast_feed=podcast, file_tracker=file_tracker)
 
     # 스케줄러 시작
     scheduler.start()

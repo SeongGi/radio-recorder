@@ -36,3 +36,5 @@ data/recordings.json
 
 # Docker
 *.tar
+data/google_tokens.json
+data/

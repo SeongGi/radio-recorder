@@ -77,12 +77,21 @@ class RecordingJob:
 
 
 class Recorder:
-    """FFmpeg 기반 라디오 스트림 녹음기"""
+    """FFmpeg를 제어하여 스트림을 녹음하는 엔진"""
 
-    def __init__(self, config):
+    def __init__(self, config, file_tracker=None):
         self.config = config
+        self.file_tracker = file_tracker
         self._active_jobs: dict[str, RecordingJob] = {}
         self._completed_jobs: list[dict] = []
+        self._ad_detector = None
+
+        # 광고 감지 모듈 초기화
+        if config.ad_detection_enabled:
+            from radio_recorder.ad_detector import AdDetector
+            self._ad_detector = AdDetector(config.ad_detection_config)
+            logger.info("광고 감지 기능 활성화")
+
         self._load_history()
 
     def _load_history(self):
@@ -107,14 +116,18 @@ class Recorder:
         with open(history_path, "w", encoding="utf-8") as f:
             json.dump(trimmed, f, ensure_ascii=False, indent=2)
 
-    def generate_output_path(self, station_name: str, start_time: datetime = None) -> str:
+    def generate_output_path(self, station_name: str, schedule_label: str = "", start_time: datetime = None) -> str:
         """녹음 파일 경로를 생성합니다."""
         if start_time is None:
             start_time = datetime.now()
 
-        # 파일명에 사용할 수 없는 문자 제거
-        safe_name = station_name.replace(" ", "_").replace("/", "-")
-        filename = f"{safe_name}_{start_time.strftime('%Y-%m-%d_%H%M')}.{self.config.recording_format}"
+        # 라벨이 있으면 라벨 우선, 없으면 방송국 이름
+        base_name = schedule_label if schedule_label else station_name
+        
+        # 파일명에 사용할 수 없는 특수문자 치환
+        import re
+        safe_name = re.sub(r'[\\/*?:"<>|]', '_', base_name).replace(" ", "_")
+        filename = f"{safe_name}_{start_time.strftime('%Y%m%d_%H%M%S')}.{self.config.recording_format}"
 
         # 날짜별 폴더
         date_dir = start_time.strftime("%Y-%m-%d")
@@ -131,10 +144,13 @@ class Recorder:
         stream_url: str,
         referer: str,
         duration_seconds: int,
+        schedule_label: str = "",
+        retention_days: int = 0,
+        storage_type: str = "LOCAL",
     ) -> RecordingJob:
         """녹음을 시작합니다."""
 
-        output_path = self.generate_output_path(station_name)
+        output_path = self.generate_output_path(station_name, schedule_label)
 
         job = RecordingJob(
             job_id=job_id,
@@ -145,6 +161,8 @@ class Recorder:
             stream_url=stream_url,
             referer=referer,
         )
+        job.retention_days = retention_days
+        job.storage_type = storage_type
 
         self._active_jobs[job_id] = job
 
@@ -234,6 +252,57 @@ class Recorder:
                     f"녹음 완료: {job.station_name} "
                     f"({job.file_size / 1024 / 1024:.1f}MB)"
                 )
+
+                # 원본 파일 Tracker 등록
+                if self.file_tracker and os.path.exists(job.output_path):
+                    rel_path = os.path.relpath(job.output_path, self.config.recording_dir)
+                    size_bytes = os.path.getsize(job.output_path)
+                    self.file_tracker.add_local_file(
+                        filename=rel_path,
+                        size_bytes=size_bytes,
+                        retention_days=getattr(job, 'retention_days', 0)
+                    )
+
+                # 광고 제거 (활성화된 경우)
+                if self._ad_detector and os.path.exists(job.output_path):
+                    try:
+                        logger.info(f"광고 감지 시작: {job.station_name}")
+                        clean_path = self._ad_detector.remove_ads(job.output_path)
+                        if clean_path:
+                            clean_size = os.path.getsize(clean_path)
+                            logger.info(
+                                f"광고 제거 완료: {os.path.basename(clean_path)} "
+                                f"({clean_size / 1024 / 1024:.1f}MB)"
+                            )
+                            # 클린 버전 Tracker 등록
+                            if self.file_tracker and os.path.exists(clean_path):
+                                clean_rel_path = os.path.relpath(clean_path, self.config.recording_dir)
+                                self.file_tracker.add_local_file(
+                                    filename=clean_rel_path,
+                                    size_bytes=os.path.getsize(clean_path),
+                                    retention_days=getattr(job, 'retention_days', 0)
+                                )
+                        else:
+                            logger.info(f"광고 미감지 (원본 유지): {job.station_name}")
+                    except Exception as e:
+                        logger.warning(f"광고 제거 실패 (원본 유지): {e}")
+
+                # 자동 저장 위치 처리 (NAS/DRIVE)
+                storage_type = getattr(job, 'storage_type', 'LOCAL')
+                if storage_type != 'LOCAL' and hasattr(self, 'storage_manager'):
+                    logger.info(f"자동 저장 처리 시작: {storage_type}")
+                    rel_path = os.path.relpath(job.output_path, self.config.recording_dir)
+                    
+                    if storage_type == 'NAS':
+                        self.storage_manager.move_to_nas(rel_path)
+                    elif storage_type == 'DRIVE':
+                        refresh_token = None
+                        if hasattr(self, 'get_refresh_token_func'):
+                            refresh_token = self.get_refresh_token_func()
+                        if refresh_token:
+                            self.storage_manager.upload_to_drive(rel_path, refresh_token)
+                        else:
+                            logger.warning("Google Drive 리프레시 토큰이 없어 자동 업로드를 건너뜁니다.")
             else:
                 job.status = RecordingStatus.FAILED
                 job.end_time = datetime.now()

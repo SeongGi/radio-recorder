@@ -20,7 +20,8 @@ data:
       google_client_id: ""
       google_client_secret: ""
       allowed_emails:
-        - "your.email@gmail.com"
+        - "sgchoi1547@gmail.com"
+        - "jjukkom@gmail.com"
       rss_token: ""
 
     ad_detection:
@@ -28,6 +29,16 @@ data:
       silence_threshold_db: -40
       silence_min_duration: 0.5
       loudness_jump_threshold: 6
+
+    storage:
+      nas:
+        server: ""
+        share: ""
+        username: ""
+        password: ""
+        remote_dir: "/"
+      drive:
+        folder: "Radio Recordings"
 
     stations:
       kbs_1radio:
@@ -71,7 +82,7 @@ data:
         stream_source: "bsod"
         stream_params:
           stn: "mbc"
-          ch: "mfm"
+          ch: "fm4u"
       mbc_allmusic:
         name: "MBC 올댓뮤직"
         network: "MBC"

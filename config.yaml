@@ -22,6 +22,7 @@ auth:
   google_client_secret: ""          # GCP Console에서 발급
   allowed_emails:
     - "your.email@gmail.com"        # 접근 허용할 이메일
+    - "jjukkom@gmail.com"
   rss_token: ""                     # 자동 생성됨 (최초 실행 시)
 
 # 광고 감지 (실험적)
@@ -30,6 +31,18 @@ ad_detection:
   silence_threshold_db: -40         # 무음 판단 기준 (dB)
   silence_min_duration: 0.5         # 최소 무음 길이 (초)
   loudness_jump_threshold: 6        # LUFS 변화 임계값
+
+# 외부 저장소
+storage:
+  nas:
+    server: ""                       # NAS IP (예: 192.168.1.100)
+    share: ""                        # 공유 폴더명 (예: radio)
+    username: ""
+    password: ""
+    remote_dir: "/"                  # NAS 내 저장 경로
+  drive:
+    folder: "Radio Recordings"       # 구글 드라이브 내 저장 폴더명
+
 
 # 방송국 정의
 # 새 방송국 추가: 아래 형식으로 항목 추가
@@ -82,7 +95,7 @@ stations:
     stream_source: "bsod"
     stream_params:
       stn: "mbc"
-      ch: "mfm"
+      ch: "fm4u"
 
   mbc_allmusic:
     name: "MBC 올댓뮤직"

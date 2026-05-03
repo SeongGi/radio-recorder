@@ -22,7 +22,7 @@ def init_oauth(app, config):
         client_id=config.google_client_id,
         client_secret=config.google_client_secret,
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
+        client_kwargs={"scope": "openid email profile https://www.googleapis.com/auth/drive.file"},
     )
 
     return oauth
@@ -63,7 +63,16 @@ def register_auth_routes(app, config):
             return redirect(url_for("dashboard"))
 
         redirect_uri = url_for("auth_callback", _external=True)
-        return oauth.google.authorize_redirect(redirect_uri)
+        # 프록시 설정 오류를 방지하기 위해 강제로 HTTPS로 변환 (localhost 제외)
+        if "localhost" not in redirect_uri and "127.0.0.1" not in redirect_uri:
+            redirect_uri = redirect_uri.replace("http://", "https://")
+            
+        logger.info(f"요청된 리디렉션 URI: {redirect_uri}")
+        return oauth.google.authorize_redirect(
+            redirect_uri,
+            access_type="offline",
+            prompt="consent",
+        )
 
     @app.route("/auth/callback")
     def auth_callback():
@@ -96,6 +105,20 @@ def register_auth_routes(app, config):
                 "name": name,
                 "picture": picture,
             }
+            session.permanent = True
+
+            # Google Drive API용 access_token 저장
+            if token.get("access_token"):
+                session["google_access_token"] = token["access_token"]
+            if token.get("refresh_token"):
+                session["google_refresh_token"] = token["refresh_token"]
+                try:
+                    import json
+                    os.makedirs("data", exist_ok=True)
+                    with open("data/google_tokens.json", "w") as f:
+                        json.dump({"refresh_token": token["refresh_token"]}, f)
+                except Exception as e:
+                    logger.error(f"Refresh token 저장 실패: {e}")
 
             logger.info(f"로그인 성공: {email}")
             return redirect(url_for("dashboard"))

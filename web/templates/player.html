@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }} - Radio Recorder</title>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg-base: #0f172a;
+            --bg-card: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --radius-xl: 16px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .player-container {
+            background-color: var(--bg-card);
+            border-radius: var(--radius-xl);
+            padding: 40px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .icon-wrapper {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            border-radius: 50%;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
+        }
+
+        .icon-wrapper i {
+            font-size: 40px;
+            color: white;
+        }
+
+        .file-info {
+            margin-bottom: 32px;
+        }
+
+        .file-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0 0 8px 0;
+            word-break: break-word;
+        }
+
+        .file-meta {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 16px;
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+        }
+
+        audio {
+            width: 100%;
+            border-radius: 8px;
+            outline: none;
+            margin-bottom: 24px;
+        }
+
+        audio::-webkit-media-controls-panel {
+            background-color: #334155;
+        }
+        
+        audio::-webkit-media-controls-current-time-display,
+        audio::-webkit-media-controls-time-remaining-display {
+            color: #f8fafc;
+        }
+
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background-color: transparent;
+            color: var(--text-muted);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-back:hover {
+            background-color: #334155;
+            color: var(--text-main);
+        }
+    </style>
+</head>
+<body>
+
+<div class="player-container">
+    <div class="icon-wrapper">
+        <i class="ri-disc-line"></i>
+    </div>
+    
+    <div class="status-badge">
+        <i class="ri-hard-drive-2-line"></i> {{ meta.status }} 파일
+    </div>
+
+    <div class="file-info">
+        <h2 class="file-title">{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }}</h2>
+        <p class="file-meta">
+            {{ (meta.size_bytes / 1024 / 1024) | round(2) }} MB • 
+            {{ meta.created[:10] if meta.created else '알 수 없음' }}
+        </p>
+    </div>
+
+    {% if meta.status == 'DRIVE' %}
+        <div style="margin-bottom: 24px;">
+            <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 16px;">
+                이 파일은 Google Drive로 이동되었습니다.<br>아래 버튼을 눌러 구글 플레이어에서 재생하세요.
+            </p>
+            <a href="{{ meta.drive_url }}" target="_blank" style="display: inline-block; padding: 12px 24px; background: var(--accent); color: white; text-decoration: none; border-radius: 8px; font-weight: 500;">
+                <i class="ri-google-drive-fill"></i> Google Drive 열기
+            </a>
+        </div>
+    {% else %}
+        {% set src = '/recordings/' + meta.filename if meta.status == 'LOCAL' else '/api/storage/nas/stream/' + meta.id %}
+        <audio controls autoplay>
+            <source src="{{ src }}" type="audio/mpeg">
+            브라우저가 오디오 재생을 지원하지 않습니다.
+        </audio>
+    {% endif %}
+
+    <button onclick="window.close()" class="btn-back">
+        <i class="ri-close-line"></i> 창 닫기
+    </button>
+</div>
+
+<script>
+    if ('mediaSession' in navigator) {
+        const fileName = "{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }}";
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: fileName,
+            artist: "Radio Recorder",
+            album: "Recorded Files",
+            artwork: [
+                { src: '/static/icon-192.png', sizes: '192x192', type: 'image/png' },
+                { src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' }
+            ]
+        });
+    }
+</script>
+</body>
+</html>

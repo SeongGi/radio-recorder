@@ -6,7 +6,7 @@ metadata:
     app: radio-recorder
   annotations:
     # Traefik (k3d 기본)
-    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.tls: "false"
     # nginx-ingress 사용 시 아래 주석 해제
     # nginx.ingress.kubernetes.io/proxy-body-size: "500m"
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
@@ -17,7 +17,7 @@ spec:
   #       - radio.your-domain.com
   #     secretName: radio-tls
   rules:
-    - host: radio.your-domain.com   # ← 실제 도메인으로 변경
+    - host: radio.seonggi.kr   # ← 실제 도메인으로 변경
       http:
         paths:
           - path: /

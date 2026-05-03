@@ -40,6 +40,12 @@ class RecordingScheduler:
         """스케줄러를 시작하고 저장된 예약을 복원합니다."""
         self._load_schedules()
         self._restore_jobs()
+        # 매일 새벽 4시에 오래된 파일 삭제 작업 등록
+        self._scheduler.add_job(
+            self._cleanup_old_files,
+            CronTrigger(hour=4, minute=0),
+            id="cleanup_old_files"
+        )
         self._scheduler.start()
         logger.info(f"스케줄러 시작 (등록된 예약: {len(self._schedules)}개)")
 
@@ -58,6 +64,8 @@ class RecordingScheduler:
         duration_minutes: int,
         label: str = "",
         enabled: bool = True,
+        retention_days: int = 0,
+        storage_type: str = "LOCAL",
     ) -> dict:
         """새 예약을 추가합니다."""
         schedule_id = str(uuid.uuid4())[:8]
@@ -75,6 +83,8 @@ class RecordingScheduler:
             "duration_minutes": duration_minutes,
             "label": label or station.get("name", station_id),
             "enabled": enabled,
+            "retention_days": retention_days,
+            "storage_type": storage_type,
             "created_at": datetime.now().isoformat(),
         }
 
@@ -280,6 +290,8 @@ class RecordingScheduler:
 
         # 녹음 시작
         job_id = f"rec_{schedule['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        retention_days = schedule.get("retention_days", 0)
+        storage_type = schedule.get("storage_type", "LOCAL")
 
         self.recorder.start_recording(
             job_id=job_id,
@@ -288,6 +300,9 @@ class RecordingScheduler:
             stream_url=stream_info["url"],
             referer=stream_info.get("referer", ""),
             duration_seconds=duration_minutes * 60,
+            schedule_label=schedule.get("label", ""),
+            retention_days=retention_days,
+            storage_type=storage_type,
         )
 
     def _load_schedules(self):
@@ -320,3 +335,45 @@ class RecordingScheduler:
                 except Exception as e:
                     logger.warning(f"예약 복원 실패 [{schedule['id']}]: {e}")
         logger.info(f"예약 {count}개 복원됨")
+
+    def _cleanup_old_files(self):
+        """보관 기간이 지난 파일을 자동으로 삭제합니다."""
+        if not self.recorder.file_tracker:
+            return
+
+        logger.info("오래된 파일 자동 삭제 작업 시작")
+        files = self.recorder.file_tracker.get_all_files()
+        now = datetime.now()
+        deleted_count = 0
+
+        for f in files:
+            retention = f.get("retention_days", 0)
+            if retention <= 0:
+                continue
+
+            created_str = f.get("created")
+            if not created_str:
+                continue
+
+            try:
+                created_dt = datetime.fromisoformat(created_str)
+                age_days = (now - created_dt).days
+
+                if age_days >= retention:
+                    filename = f.get("filename")
+                    status = f.get("status")
+                    
+                    if status == "LOCAL":
+                        filepath = os.path.join(self.config.recording_dir, filename)
+                        if os.path.exists(filepath):
+                            os.remove(filepath)
+                            logger.info(f"보관 기간 만료 삭제: {filename} ({retention}일 경과)")
+                    
+                    # Tracker에서도 제거
+                    self.recorder.file_tracker.delete_file(f["id"])
+                    deleted_count += 1
+            except Exception as e:
+                logger.error(f"파일 자동 삭제 중 오류 [{f.get('filename')}]: {e}")
+
+        if deleted_count > 0:
+            logger.info(f"총 {deleted_count}개의 오래된 파일이 삭제되었습니다.")

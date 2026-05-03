@@ -14,10 +14,22 @@ spec:
       labels:
         app: radio-recorder
     spec:
+      initContainers:
+        - name: init-config
+          image: busybox
+          command: ['sh', '-c', 'cp -n /app/init-config/config.yaml /app/data/config.yaml || true']
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: config
+              mountPath: /app/init-config/config.yaml
+              subPath: config.yaml
       containers:
         - name: radio-recorder
           image: radio-recorder:latest
           imagePullPolicy: IfNotPresent
+          command: ["python", "run.py"]
+          args: ["--config", "/app/data/config.yaml"]
           ports:
             - containerPort: 8080
               name: http
@@ -26,9 +38,9 @@ spec:
               mountPath: /app/recordings
             - name: data
               mountPath: /app/data
-            - name: config
-              mountPath: /app/config.yaml
-              subPath: config.yaml
+          env:
+            - name: AUTHLIB_INSECURE_TRANSPORT
+              value: "1"
           envFrom:
             - secretRef:
                 name: radio-recorder-oauth
@@ -41,14 +53,12 @@ spec:
               cpu: "1"
               memory: 512Mi
           livenessProbe:
-            httpGet:
-              path: /auth/status
+            tcpSocket:
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
-            httpGet:
-              path: /auth/status
+            tcpSocket:
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 10
