@@ -55,7 +55,7 @@
 ### 1. 클론 및 설치
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/radio-recorder.git
+git clone https://github.com/SeongGi/radio-recorder.git
 cd radio-recorder
 pip install -r requirements.txt
 ```
