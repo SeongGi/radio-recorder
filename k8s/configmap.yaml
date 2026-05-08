@@ -41,6 +41,7 @@ data:
         folder: "Radio Recordings"
 
     stations:
+      # ─── KBS ───
       kbs_1radio:
         name: "KBS 1라디오"
         network: "KBS"
@@ -69,6 +70,14 @@ data:
         stream_params:
           stn: "kbs"
           ch: "2fm"
+      kbs_world:
+        name: "KBS 한민족방송"
+        network: "KBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "kbs"
+          ch: "world"
+      # ─── MBC ───
       mbc_standard:
         name: "MBC 표준FM"
         network: "MBC"
@@ -90,6 +99,7 @@ data:
         stream_params:
           stn: "mbc"
           ch: "chm"
+      # ─── SBS ───
       sbs_power:
         name: "SBS 파워FM"
         network: "SBS"
@@ -104,5 +114,75 @@ data:
         stream_params:
           stn: "sbs"
           ch: "lovefm"
+      # ─── EBS ───
+      ebs_fm:
+        name: "EBS FM"
+        network: "EBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "ebs"
+          ch: "efm"
+      # ─── CBS ───
+      cbs_standard:
+        name: "CBS 표준FM"
+        network: "CBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "cbs"
+          ch: "sfm"
+      cbs_music:
+        name: "CBS 음악FM"
+        network: "CBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "cbs"
+          ch: "mfm"
+      # ─── TBS ───
+      tbs_traffic:
+        name: "TBS 교통방송"
+        network: "TBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "tbs"
+          ch: "tbs"
+      tbs_efm:
+        name: "TBS eFM (영어)"
+        network: "TBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "tbs"
+          ch: "efm"
+      # ─── BBS ───
+      bbs:
+        name: "BBS 불교방송"
+        network: "BBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "bbs"
+          ch: "bbs"
+      # ─── OBS ───
+      obs:
+        name: "OBS 경인방송"
+        network: "OBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "obs"
+          ch: "obs"
+      # ─── YTN ───
+      ytn:
+        name: "YTN 라디오"
+        network: "YTN"
+        stream_source: "bsod"
+        stream_params:
+          stn: "ytn"
+          ch: "ytn"
+      # ─── WBS ───
+      wbs:
+        name: "WBS 원음방송"
+        network: "WBS"
+        stream_source: "bsod"
+        stream_params:
+          stn: "wbs"
+          ch: "wbs"
 
     schedules: []
