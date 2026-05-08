@@ -59,6 +59,27 @@ function initPWA() {
             });
         }
     });
+
+    // PWA 앱으로 실행 중일 때 뒤로가기 버튼 → 앱 종료
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+
+    if (isStandalone) {
+        // 히스토리 스택에 현재 페이지 추가 (뒤로가기 시 popstate 발생)
+        history.pushState({ page: 'main' }, '', window.location.href);
+
+        window.addEventListener('popstate', (e) => {
+            // 뒤로가기가 눌리면 앱 종료 확인 후 창 닫기
+            if (confirm('앱을 종료하시겠습니까?')) {
+                window.close();
+                // window.close()가 막힌 경우 대비: 빈 히스토리로 이동
+                window.location.href = 'about:blank';
+            } else {
+                // 취소 시 히스토리 스택 다시 추가
+                history.pushState({ page: 'main' }, '', window.location.href);
+            }
+        });
+    }
 }
 
 function registerServiceWorker() {

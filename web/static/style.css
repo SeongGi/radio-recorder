@@ -26,6 +26,13 @@
     --kbs-color: #3b82f6;
     --mbc-color: #10b981;
     --sbs-color: #f43f5e;
+    --ebs-color: #f59e0b;
+    --cbs-color: #8b5cf6;
+    --tbs-color: #06b6d4;
+    --bbs-color: #f97316;
+    --obs-color: #84cc16;
+    --ytn-color: #e11d48;
+    --wbs-color: #6366f1;
 
     --radius-sm: 8px;
     --radius-md: 12px;
@@ -1281,23 +1288,15 @@ select.input {
         flex-shrink: 0;
     }
 
-    /* 방송국 그리드 - 모바일에서 2열로 */
+    /* 방송국 그리드 - 모바일에서 1열로 (이름이 길어 2열 시 잘림) */
     .station-grid, .live-station-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+        grid-template-columns: 1fr;
+        gap: 8px;
     }
 
     .live-station-card {
-        padding: 14px;
-        min-height: 100px;
-    }
-
-    .live-station-card .station-name {
-        font-size: 14px;
-    }
-    
-    .live-station-card .station-network {
-        font-size: 10px;
+        padding: 14px 16px;
+        min-height: auto;
     }
 
     /* 플레이어 바 - 모바일에서 레이아웃 조정 */

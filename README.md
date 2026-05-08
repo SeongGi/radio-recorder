@@ -1,6 +1,6 @@
 # 📻 Radio Recorder
 
-한국 라디오(MBC, KBS, SBS) 예약 녹음 프로그램.
+한국 라디오 예약 녹음 프로그램.  
 예약된 시간에 자동으로 라디오를 녹음하여 MP3 파일로 저장하고, 팟캐스트 앱이나 웹 대시보드에서 청취할 수 있습니다.
 
 ---
@@ -10,14 +10,34 @@
 | 기능 | 설명 |
 |------|------|
 | **예약 녹음** | 요일/시간 지정 반복 녹음, 단발성 녹음 |
-| **9개 채널** | KBS 1R/2R/클래식FM/쿨FM, MBC 표준FM/FM4U/올댓뮤직, SBS 파워FM/러브FM |
+| **18개 채널** | KBS, MBC, SBS, EBS, CBS, TBS, BBS, OBS, YTN, WBS |
+| **라이브 청취** | 대시보드에서 실시간 스트리밍 청취 (HLS) |
 | **웹 대시보드** | 다크모드 프리미엄 UI — 예약/녹음/파일 관리 |
-| **Google OAuth** | 외부 접근 시 Google 계정 인증으로 보호 |
+| **Google OAuth** | 외부 접근 시 Google 계정 인증으로 보호 (선택) |
 | **Podcast RSS** | 팟캐스트 앱(Apple Podcasts, Pocket Casts 등)으로 구독 |
-| **다운로드** | 웹에서 직접 재생 및 다운로드 |
+| **외부 저장소** | 녹음 완료 후 NAS(SMB) 또는 Google Drive 자동 이동 |
+| **PWA 지원** | 모바일 홈 화면에 앱으로 추가, 뒤로가기 시 앱 종료 |
 | **광고 감지** | 무음/음량 분석 기반 광고 제거 (실험적, 원본 보존) |
-| **확장 가능** | `config.yaml`에 방송국 추가만으로 확장 |
 | **컨테이너** | Docker + k3d/Kubernetes 배포 지원 |
+
+---
+
+## 📻 지원 방송국
+
+| 방송사 | 채널 |
+|--------|------|
+| **KBS** | 1라디오, 2라디오(해피FM), 클래식FM, 쿨FM, 한민족방송 |
+| **MBC** | 표준FM, FM4U, 올댓뮤직 |
+| **SBS** | 파워FM, 러브FM |
+| **EBS** | EBS FM |
+| **CBS** | 표준FM, 음악FM |
+| **TBS** | 교통방송, eFM(영어) |
+| **BBS** | 불교방송 |
+| **OBS** | 경인방송 |
+| **YTN** | YTN 라디오 |
+| **WBS** | 원음방송 |
+
+> `config.yaml`의 `stations` 섹션에 항목을 추가하면 언제든지 방송국을 늘릴 수 있습니다.
 
 ---
 
@@ -27,7 +47,7 @@
 외부 (HTTPS)
   │
   ├── 웹 브라우저 → Google OAuth → 대시보드 (예약/녹음/파일)
-  ├── 핸드폰 브라우저 → 다운로드
+  ├── 핸드폰 브라우저 → PWA 앱처럼 사용
   └── 팟캐스트 앱 → RSS 피드 (토큰 인증)
         │
   ┌─────▼──────────────────────────────────────┐
@@ -39,6 +59,8 @@
   │  (bsod.kr → API → radio-browser.info)       │
   │       ↓                                     │
   │  PersistentVolume (녹음 파일)               │
+  │       ↓                                     │
+  │  StorageManager → NAS / Google Drive        │
   └─────────────────────────────────────────────┘
 ```
 
@@ -93,19 +115,6 @@ python run.py --test-streams
 python run.py --test-record kbs_classic -d 10
 ```
 
-서버가 시작되면:
-```
-═══════════════════════════════════════════════════
-  📻 Radio Recorder 시작
-═══════════════════════════════════════════════════
-  🌐 로컬:    http://localhost:8080
-  🌐 네트워크: http://192.168.0.10:8080
-  📁 녹음 저장: /app/recordings
-  📅 등록된 예약: 0개
-  🎙️ RSS 피드: http://192.168.0.10:8080/feed/rss?token=xxx
-═══════════════════════════════════════════════════
-```
-
 ---
 
 ## 🐳 Docker / k3d 배포
@@ -151,29 +160,15 @@ kubectl apply -f k8s/ingress.yaml
 kubectl get pods -w
 ```
 
-### 외부 접근 (Cloudflare Tunnel 예시)
-
-```bash
-# Cloudflare Tunnel 설치
-brew install cloudflared
-
-# 터널 생성
-cloudflared tunnel login
-cloudflared tunnel create radio
-cloudflared tunnel route dns radio radio.your-domain.com
-
-# 실행
-cloudflared tunnel --url http://localhost:8080 run radio
-```
-
 ---
 
 ## 📱 핸드폰에서 듣기
 
-### 방법 1: 웹 대시보드
+### 방법 1: PWA 앱으로 설치
 1. 브라우저에서 `https://your-domain.com` 접속
 2. Google 로그인
-3. 📁 파일 탭에서 재생 또는 다운로드
+3. 브라우저 메뉴 → **"홈 화면에 추가"** 선택
+4. 설치된 앱처럼 사용 (뒤로가기 버튼으로 앱 종료)
 
 ### 방법 2: 팟캐스트 앱 구독
 1. 대시보드 → ⚙️ 설정 → RSS 피드 URL 복사
@@ -190,13 +185,14 @@ radio/
 ├── config.yaml               # 설정 (방송국, 인증, 녹음 옵션)
 ├── requirements.txt          # Python 의존성
 ├── Dockerfile                # 컨테이너 이미지
-├── .dockerignore
 │
 ├── radio_recorder/           # 핵심 모듈
 │   ├── config.py             # 설정 관리
 │   ├── stream_resolver.py    # 스트림 URL 해석 (3단계 폴백)
 │   ├── recorder.py           # FFmpeg 녹음 엔진
 │   ├── scheduler.py          # APScheduler 예약
+│   ├── storage.py            # NAS / Google Drive 업로드
+│   ├── file_tracker.py       # 녹음 파일 메타데이터 추적
 │   ├── ad_detector.py        # 광고 감지 (실험적)
 │   └── podcast_feed.py       # RSS 피드 생성
 │
@@ -205,10 +201,15 @@ radio/
 │   ├── auth.py               # Google OAuth 2.0
 │   ├── templates/
 │   │   ├── login.html        # 로그인 페이지
-│   │   └── dashboard.html    # 대시보드
+│   │   ├── dashboard.html    # 대시보드
+│   │   └── player.html       # 파일 플레이어
 │   └── static/
 │       ├── style.css         # 다크모드 UI
-│       └── app.js            # 대시보드 JS
+│       ├── app.js            # 대시보드 JS
+│       ├── sw.js             # 서비스 워커 (PWA 캐싱)
+│       ├── manifest.json     # PWA 매니페스트
+│       ├── icon-192.png      # PWA 아이콘
+│       └── icon-512.png
 │
 └── k8s/                      # Kubernetes 매니페스트
     ├── deployment.yaml
@@ -229,14 +230,13 @@ radio/
 
 ```yaml
 stations:
-  # 새 방송국 예시
-  ebs_fm:
-    name: "EBS FM"
-    network: "EBS"
+  my_station:
+    name: "방송국 이름"
+    network: "방송사"
     stream_source: "bsod"
     stream_params:
-      stn: "ebs"
-      ch: "fm"
+      stn: "방송사코드"
+      ch: "채널코드"
 ```
 
 ### 예약 녹음 (CLI에서 직접 설정)
@@ -250,16 +250,23 @@ schedules:
     days: ["mon", "tue", "wed", "thu", "fri"]
     start_time: "07:00"
     duration_minutes: 120
+    retention_days: 7       # 7일 후 자동 삭제 (0 = 영구 보관)
+    storage_type: "LOCAL"   # LOCAL / NAS / DRIVE
     enabled: true
 ```
 
-### 광고 감지 활성화
+### 외부 저장소 설정
 
 ```yaml
-ad_detection:
-  enabled: true
-  silence_threshold_db: -40
-  loudness_jump_threshold: 6
+storage:
+  nas:
+    server: "192.168.1.100"   # NAS IP
+    share: "radio"            # 공유 폴더명
+    username: "user"
+    password: "password"
+    remote_dir: "/recordings"
+  drive:
+    folder: "Radio Recordings"  # Google Drive 내 저장 폴더명
 ```
 
 ---
