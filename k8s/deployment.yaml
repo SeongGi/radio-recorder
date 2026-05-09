@@ -17,7 +17,7 @@ spec:
       initContainers:
         - name: init-config
           image: busybox
-          command: ['sh', '-c', 'cp -n /app/init-config/config.yaml /app/data/config.yaml || true']
+          command: ['sh', '-c', 'cp /app/init-config/config.yaml /app/data/config.yaml']
           volumeMounts:
             - name: data
               mountPath: /app/data
