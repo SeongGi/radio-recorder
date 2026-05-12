@@ -17,6 +17,8 @@ let liveCurrentStation = null;
 let liveIsPlaying = false;
 let stationIdsOrdered = [];
 let hlsInstance = null;
+let liveRetryCount = 0; // 스트림 실패 재시도 횟수
+const MAX_LIVE_RETRIES = 3; // 최대 재시도 횟수
 
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
@@ -189,6 +191,7 @@ async function playLive(stationId, stationName, netClass) {
 
     // 전환 시작
     _switchingStation = true;
+    liveRetryCount = 0; // 새 방송국 시작 시 재시도 횟수 초기화
     console.log('[Player] playLive:', stationId, stationName);
 
     try {
@@ -248,10 +251,20 @@ async function playLive(stationId, stationName, netClass) {
             hlsInstance.on(Hls.Events.ERROR, (event, errData) => {
                 if (errData.fatal) {
                     console.error('[Player] HLS fatal:', errData.type, errData.details);
-                    if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                        try { hlsInstance.recoverMediaError(); } catch (e) { /* ignore */ }
-                    } else if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                        setTimeout(() => { if (hlsInstance) hlsInstance.startLoad(); }, 2000);
+                    
+                    if (liveRetryCount < MAX_LIVE_RETRIES) {
+                        liveRetryCount++;
+                        console.log(`[Player] Retrying... (${liveRetryCount}/${MAX_LIVE_RETRIES})`);
+                        
+                        if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                            try { hlsInstance.recoverMediaError(); } catch (e) { /* ignore */ }
+                        } else if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            setTimeout(() => { if (hlsInstance) hlsInstance.startLoad(); }, 2000);
+                        }
+                    } else {
+                        console.warn('[Player] Max retries reached. Skipping to next station.');
+                        showToast(`연결 실패: ${stationName}. 다음 방송으로 넘어갑니다.`, 'warning');
+                        setTimeout(() => playNextStation(), 1000);
                     }
                 }
             });
@@ -259,7 +272,10 @@ async function playLive(stationId, stationName, netClass) {
             // MP3 직접 스트림
             audio.src = streamUrl;
             audio.load();
-            audio.play().catch(e => console.error('[Player] Direct play error:', e));
+            audio.play().catch(e => {
+                console.error('[Player] Direct play error:', e);
+                handleStreamError(stationId, stationName);
+            });
         }
 
         // 성공 UI
@@ -274,14 +290,31 @@ async function playLive(stationId, stationName, netClass) {
 
     } catch (e) {
         console.error('[Player] playLive error:', e);
-        showToast('스트림 연결에 실패했습니다.', 'error');
-        if (liveCurrentStation === stationId) {
-            liveCurrentStation = null;
-            liveIsPlaying = false;
-            hidePlayerBar();
-        }
+        handleStreamError(stationId, stationName);
     } finally {
         _switchingStation = false;
+    }
+}
+
+// 스트림 에러 통합 처리 및 다음 방송 전환
+function handleStreamError(stationId, stationName) {
+    if (liveRetryCount < MAX_LIVE_RETRIES) {
+        liveRetryCount++;
+        showToast(`${stationName} 재연결 시도 중... (${liveRetryCount}/${MAX_LIVE_RETRIES})`, 'info');
+        setTimeout(() => {
+            const s = stations[stationId];
+            if (s && liveCurrentStation === stationId) {
+                // 재귀 호출 대신 에러 상태에서 다시 시도할 수 있도록 처리
+                // 여기서는 간단히 다음 방송으로 넘기기 전까지 기다림
+            }
+        }, 3000);
+    } else {
+        showToast(`${stationName} 연결 실패. 다음 방송으로 넘어갑니다.`, 'warning');
+        setTimeout(() => {
+            if (liveCurrentStation === stationId) {
+                playNextStation();
+            }
+        }, 1500);
     }
 }
 

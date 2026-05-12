@@ -32,6 +32,13 @@ DIRECT_API_MAP = {
         "powerfm": "https://radiolive.sbs.co.kr/powerpc/powerfm.stream/playlist.m3u8",
         "lovefm": "https://radiolive.sbs.co.kr/lovepc/lovefm.stream/playlist.m3u8",
     },
+    "TBS": {
+        "tbs": "http://58.72.205.26/tbs-traffic/_definst_/traffic.stream/playlist.m3u8",
+        "efm": "http://58.72.205.26/tbs-efm/_definst_/efm.stream/playlist.m3u8",
+    },
+    "WBS": {
+        "wbs": "http://wbs.mvod.cdn.vcloud.co.kr/wbs/seoul/playlist.m3u8",
+    },
 }
 
 # 방송사별 Referer 헤더
