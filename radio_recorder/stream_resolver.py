@@ -33,11 +33,11 @@ DIRECT_API_MAP = {
         "lovefm": "https://radiolive.sbs.co.kr/lovepc/lovefm.stream/playlist.m3u8",
     },
     "TBS": {
-        "tbs": "http://58.72.205.26/tbs-traffic/_definst_/traffic.stream/playlist.m3u8",
-        "efm": "http://58.72.205.26/tbs-efm/_definst_/efm.stream/playlist.m3u8",
+        "tbs": "https://tbs.seoul.kr/live/traffic.m3u8",
+        "efm": "https://tbs.seoul.kr/live/efm.m3u8",
     },
     "WBS": {
-        "wbs": "http://wbs.mvod.cdn.vcloud.co.kr/wbs/seoul/playlist.m3u8",
+        "wbs": "https://wbs.mvod.cdn.vcloud.co.kr/wbs/seoul/playlist.m3u8",
     },
 }
 

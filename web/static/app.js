@@ -298,23 +298,30 @@ async function playLive(stationId, stationName, netClass) {
 
 // 스트림 에러 통합 처리 및 다음 방송 전환
 function handleStreamError(stationId, stationName) {
+    console.warn(`[Player] Handling error for ${stationName} (Retry: ${liveRetryCount}/${MAX_LIVE_RETRIES})`);
+    
     if (liveRetryCount < MAX_LIVE_RETRIES) {
         liveRetryCount++;
-        showToast(`${stationName} 재연결 시도 중... (${liveRetryCount}/${MAX_LIVE_RETRIES})`, 'info');
+        showToast(`${stationName} 연결 시도 중... (${liveRetryCount}/${MAX_LIVE_RETRIES})`, 'info');
+        
+        // 잠시 후 다시 시도
         setTimeout(() => {
-            const s = stations[stationId];
-            if (s && liveCurrentStation === stationId) {
-                // 재귀 호출 대신 에러 상태에서 다시 시도할 수 있도록 처리
-                // 여기서는 간단히 다음 방송으로 넘기기 전까지 기다림
+            if (liveCurrentStation === stationId) {
+                const s = stations[stationId];
+                if (s) {
+                    playLive(stationId, stationName, (s.network || 'OTHER').toLowerCase());
+                }
             }
         }, 3000);
     } else {
+        console.error(`[Player] ${stationName} failed after max retries. Skipping.`);
         showToast(`${stationName} 연결 실패. 다음 방송으로 넘어갑니다.`, 'warning');
+        
         setTimeout(() => {
             if (liveCurrentStation === stationId) {
                 playNextStation();
             }
-        }, 1500);
+        }, 2000);
     }
 }
 
@@ -619,6 +626,8 @@ async function testAllStreams() {
             el.title = '테스트 중...';
         }
     }
+
+
 
     try {
         const results = await api('/api/streams/test');
