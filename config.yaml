@@ -200,15 +200,6 @@ stations:
       stn: "ytn"
       ch: "ytn"
 
-  # ─── WBS ───
-  wbs:
-    name: "WBS 원음방송"
-    network: "WBS"
-    stream_source: "bsod"
-    stream_params:
-      stn: "wbs"
-      ch: "wbs"
-
 # 예약 목록 (웹 UI에서 관리, 직접 편집도 가능)
 schedules: []
 # 예시:

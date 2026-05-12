@@ -176,13 +176,5 @@ data:
         stream_params:
           stn: "ytn"
           ch: "ytn"
-      # ─── WBS ───
-      wbs:
-        name: "WBS 원음방송"
-        network: "WBS"
-        stream_source: "bsod"
-        stream_params:
-          stn: "wbs"
-          ch: "wbs"
 
     schedules: []
