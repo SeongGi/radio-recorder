@@ -36,9 +36,6 @@ DIRECT_API_MAP = {
         "tbs": "https://tbs.seoul.kr/live/traffic.m3u8",
         "efm": "https://tbs.seoul.kr/live/efm.m3u8",
     },
-    "WBS": {
-        "wbs": "https://wbs.mvod.cdn.vcloud.co.kr/wbs/seoul/playlist.m3u8",
-    },
 }
 
 # 방송사별 Referer 헤더
