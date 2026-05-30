@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>Radio Recorder - 로그인</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -186,6 +186,34 @@
         .station-badge.kbs { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
         .station-badge.mbc { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .station-badge.sbs { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 32px 20px;
+                max-width: 92%;
+                margin: 0 auto;
+            }
+            h1 {
+                font-size: 24px;
+            }
+            .subtitle {
+                font-size: 13px;
+                margin-bottom: 28px;
+            }
+            .waveform {
+                margin-bottom: 28px;
+            }
+            .stations-preview {
+                gap: 12px;
+                margin-bottom: 28px;
+            }
+            .google-btn {
+                padding: 12px 20px;
+                font-size: 14px;
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 <body>

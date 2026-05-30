@@ -1,8 +1,8 @@
-const CACHE_NAME = 'radio-recorder-v10';
+const CACHE_NAME = 'radio-recorder-v11';
 const STATIC_ASSETS = [
   '/',
-  '/static/style.css',
-  '/static/app.js?v=1.0.9',
+  '/static/style.css?v=1.1.0',
+  '/static/app.js?v=1.1.0',
   '/static/manifest.json',
   '/static/icon-192.png',
 ];

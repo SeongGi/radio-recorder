@@ -1255,22 +1255,22 @@ select.input {
 @media (max-width: 768px) {
     /* 전체 레이아웃 */
     .header {
-        padding: 12px 16px;
+        padding: 14px 18px;
     }
     
     .header h1 {
-        font-size: 18px;
+        font-size: 20px;
     }
 
     .content {
         padding: 16px;
-        padding-bottom: 140px; /* 플레이어 바와 탭 높이 고려 */
+        padding-bottom: 160px; /* 플레이어 바와 탭 높이 고려하여 충분히 여백 지정 */
     }
 
     /* 탭 네비게이션 (모바일에서 가로 스크롤 가능하게) */
     .tabs {
-        padding: 0 8px;
-        gap: 4px;
+        padding: 4px 12px;
+        gap: 6px;
         overflow-x: auto;
         white-space: nowrap;
         -webkit-overflow-scrolling: touch;
@@ -1282,36 +1282,48 @@ select.input {
     }
     
     .tab {
-        padding: 12px 14px;
-        font-size: 13px;
+        padding: 12px 16px;
+        font-size: 14px;
         flex-shrink: 0;
     }
 
     /* 방송국 그리드 - 모바일에서 1열로 (이름이 길어 2열 시 잘림) */
     .station-grid, .live-station-grid {
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: 10px;
     }
 
     .live-station-card {
-        padding: 14px 16px;
+        padding: 16px 18px;
         min-height: auto;
+    }
+
+    .live-name, .station-name {
+        font-size: 16px;
+    }
+
+    .live-sub, .station-meta {
+        font-size: 13px;
     }
 
     /* 플레이어 바 - 모바일에서 레이아웃 조정 */
     .live-player-bar {
-        padding: 10px 16px;
-        padding-bottom: max(12px, env(safe-area-inset-bottom));
+        padding: 14px 20px;
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
         flex-direction: column;
         align-items: center;
-        gap: 12px;
+        gap: 14px;
     }
 
     .live-player-info {
         width: 100%;
         justify-content: center;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        padding-bottom: 8px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding-bottom: 10px;
+    }
+
+    .live-station-name {
+        font-size: 17px;
     }
 
     .live-player-controls {
@@ -1324,25 +1336,45 @@ select.input {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        padding: 16px;
     }
     
     .file-info {
         width: 100%;
     }
 
+    .file-name {
+        font-size: 15px;
+    }
+
+    .file-meta {
+        font-size: 13px;
+    }
+
     .file-actions {
         width: 100%;
         justify-content: flex-end;
-        padding-top: 8px;
-        border-top: 1px solid rgba(255,255,255,0.03);
+        padding-top: 10px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+        gap: 8px;
     }
 
     /* 모달 조정 */
     .modal {
-        width: 92%;
+        width: 94%;
         margin: 20px auto;
         max-height: 85vh;
         overflow-y: auto;
+    }
+
+    .modal-header h3 {
+        font-size: 20px;
+    }
+
+    /* 입력창 포커싱 시 줌인 현상 방지하기 위해 최소 16px 강제 */
+    .input, select.input, .form-group input, .form-group select {
+        font-size: 16px !important;
+        padding: 12px 14px;
     }
 
     .form-row {
@@ -1352,31 +1384,53 @@ select.input {
     
     .day-selector {
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 8px;
     }
     
     .day-chip {
         flex: 1;
-        min-width: 60px;
+        min-width: 65px;
+        padding: 10px 0;
+        font-size: 14px;
         text-align: center;
         justify-content: center;
     }
 
+    .schedule-label {
+        font-size: 16px;
+    }
+
+    .schedule-details {
+        font-size: 13px;
+    }
+
     /* 버튼 터치 영역 확보 */
     .btn {
-        padding: 12px 16px;
+        padding: 12px 18px;
+        font-size: 15px;
+        min-height: 46px;
+    }
+
+    .btn-sm {
+        padding: 8px 16px;
         font-size: 14px;
-        min-height: 44px;
+        min-height: 38px;
     }
 
     .bulk-action-bar {
         flex-direction: column;
         align-items: stretch;
         gap: 12px;
+        padding: 14px;
     }
     
+    .bulk-info {
+        font-size: 14px;
+    }
+
     .bulk-buttons {
         justify-content: space-between;
+        gap: 8px;
     }
     
     .bulk-buttons .btn {

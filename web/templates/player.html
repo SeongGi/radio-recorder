@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }} - Radio Recorder</title>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
     <style>
@@ -119,6 +119,32 @@
         .btn-back:hover {
             background-color: #334155;
             color: var(--text-main);
+        }
+
+        @media (max-width: 480px) {
+            .player-container {
+                padding: 24px 16px;
+                max-width: 96%;
+            }
+            .icon-wrapper {
+                width: 64px;
+                height: 64px;
+                margin-bottom: 16px;
+            }
+            .icon-wrapper i {
+                font-size: 32px;
+            }
+            .file-title {
+                font-size: 17px;
+            }
+            .file-meta {
+                font-size: 13px;
+            }
+            .btn-back {
+                width: 100%;
+                justify-content: center;
+                padding: 12px;
+            }
         }
     </style>
 </head>
