@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import logging
+import threading
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -9,28 +10,31 @@ logger = logging.getLogger(__name__)
 class FileTracker:
     def __init__(self, data_dir: str):
         self.db_path = os.path.join(data_dir, "files_meta.json")
+        self.lock = threading.Lock()
         self._data = {}
         self.load()
 
     def load(self):
         """저장된 파일 메타데이터 로드"""
-        if os.path.exists(self.db_path):
-            try:
-                with open(self.db_path, "r", encoding="utf-8") as f:
-                    self._data = json.load(f)
-            except Exception as e:
-                logger.error(f"파일 메타데이터 로드 실패: {e}")
+        with self.lock:
+            if os.path.exists(self.db_path):
+                try:
+                    with open(self.db_path, "r", encoding="utf-8") as f:
+                        self._data = json.load(f)
+                except Exception as e:
+                    logger.error(f"파일 메타데이터 로드 실패: {e}")
+                    self._data = {}
+            else:
                 self._data = {}
-        else:
-            self._data = {}
 
     def save(self):
         """파일 메타데이터 저장"""
-        try:
-            with open(self.db_path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"파일 메타데이터 저장 실패: {e}")
+        with self.lock:
+            try:
+                with open(self.db_path, "w", encoding="utf-8") as f:
+                    json.dump(self._data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"파일 메타데이터 저장 실패: {e}")
 
     def add_local_file(self, filename: str, size_bytes: int, created_iso: str = None, retention_days: int = 0) -> str:
         """새로운 로컬 파일 등록"""

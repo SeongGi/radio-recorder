@@ -20,6 +20,182 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 logger = logging.getLogger(__name__)
 
 
+def run_nas_transfer_in_background(paths, action, nas, recording_dir, file_tracker):
+    def worker():
+        import uuid
+        from smbprotocol.connection import Connection
+        from smbprotocol.session import Session
+        from smbprotocol.tree import TreeConnect
+        from smbprotocol.open import Open, CreateDisposition, FileAttributes, \
+            ShareAccess, CreateOptions, FilePipePrinterAccessMask
+
+        try:
+            # 1단계: 임시 전송 중(TRANSFERRING) 상태로 변경
+            for rel_path in paths:
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                    if meta:
+                        file_tracker.update_status(meta["id"], "TRANSFERRING")
+
+            # SMB 연결
+            conn = Connection(uuid.uuid4(), nas["server"], 445)
+            conn.connect()
+            sess = Session(conn, nas.get("username", ""), nas.get("password", ""))
+            sess.connect()
+            tree = TreeConnect(sess, f"\\\\{nas['server']}\\{nas['share']}")
+            tree.connect()
+
+            remote_dir = nas.get("remote_dir", "/").replace("/", "\\").strip("\\")
+
+            for rel_path in paths:
+                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
+                meta = None
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                
+                if not meta:
+                    continue
+
+                if not os.path.exists(full_path):
+                    file_tracker.update_status(meta["id"], "LOCAL")
+                    continue
+
+                try:
+                    filename = os.path.basename(rel_path)
+                    remote_path = f"{remote_dir}\\{filename}" if remote_dir else filename
+
+                    file_open = Open(tree, remote_path)
+                    file_open.create(
+                        desired_access=FilePipePrinterAccessMask.GENERIC_WRITE,
+                        file_attributes=FileAttributes.FILE_ATTRIBUTE_NORMAL,
+                        share_access=ShareAccess.FILE_SHARE_WRITE,
+                        create_disposition=CreateDisposition.FILE_OVERWRITE_IF,
+                        create_options=CreateOptions.FILE_NON_DIRECTORY_FILE,
+                    )
+
+                    with open(full_path, "rb") as f:
+                        offset = 0
+                        while True:
+                            chunk = f.read(65536)
+                            if not chunk:
+                                break
+                            file_open.write(chunk, offset=offset)
+                            offset += len(chunk)
+
+                    file_open.close()
+
+                    if action == "move":
+                        os.remove(full_path)
+                        file_tracker.update_status(meta["id"], "NAS")
+                    else:
+                        file_tracker.update_status(meta["id"], "LOCAL")
+
+                except Exception as e:
+                    logger.error(f"NAS 비동기 전송 에러 ({rel_path}): {e}")
+                    file_tracker.update_status(meta["id"], "LOCAL")
+
+            tree.disconnect()
+            conn.disconnect()
+
+        except Exception as e:
+            logger.error(f"NAS 비동기 연결 실패: {e}")
+            for rel_path in paths:
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                    if meta and meta.get("status") == "TRANSFERRING":
+                        file_tracker.update_status(meta["id"], "LOCAL")
+
+    import threading
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def run_drive_upload_in_background(paths, folder_name, access_token, refresh_token, recording_dir, file_tracker, config):
+    def worker():
+        from google.oauth2.credentials import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+
+        try:
+            # 1단계: 임시 전송 중(TRANSFERRING) 상태로 변경
+            for rel_path in paths:
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                    if meta:
+                        file_tracker.update_status(meta["id"], "TRANSFERRING")
+
+            creds = Credentials(
+                token=access_token,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=config.google_client_id,
+                client_secret=config.google_client_secret,
+            )
+            service = build("drive", "v3", credentials=creds)
+
+            # 폴더 찾기 또는 생성
+            folder_query = (
+                f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
+                f"and trashed=false"
+            )
+            results = service.files().list(q=folder_query, fields="files(id)").execute()
+            folders = results.get("files", [])
+
+            if folders:
+                folder_id = folders[0]["id"]
+            else:
+                folder_metadata = {
+                    "name": folder_name,
+                    "mimeType": "application/vnd.google-apps.folder",
+                }
+                folder = service.files().create(body=folder_metadata, fields="id").execute()
+                folder_id = folder["id"]
+
+            for rel_path in paths:
+                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
+                meta = None
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                
+                if not meta:
+                    continue
+
+                if not os.path.exists(full_path):
+                    file_tracker.update_status(meta["id"], "LOCAL")
+                    continue
+
+                try:
+                    filename = os.path.basename(rel_path)
+                    file_metadata = {
+                        "name": filename,
+                        "parents": [folder_id],
+                    }
+                    media = MediaFileUpload(full_path, mimetype="audio/mpeg", resumable=True)
+                    drive_file = service.files().create(
+                        body=file_metadata, media_body=media, fields="id, webViewLink"
+                    ).execute()
+                    
+                    # 업로드 성공 후 로컬 파일 삭제 (이동 처리)
+                    os.remove(full_path)
+                    
+                    # Tracker 업데이트
+                    file_tracker.update_status(meta["id"], "DRIVE", drive_url=drive_file.get("webViewLink"))
+
+                except Exception as e:
+                    logger.error(f"Drive 비동기 업로드 에러 ({rel_path}): {e}")
+                    file_tracker.update_status(meta["id"], "LOCAL")
+
+        except Exception as e:
+            logger.error(f"Drive 비동기 연결 실패: {e}")
+            for rel_path in paths:
+                if file_tracker:
+                    meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
+                    if meta and meta.get("status") == "TRANSFERRING":
+                        file_tracker.update_status(meta["id"], "LOCAL")
+
+    import threading
+    threading.Thread(target=worker, daemon=True).start()
+
+
 def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_tracker=None):
     """Flask 앱을 생성합니다."""
 
@@ -406,81 +582,14 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
             return jsonify({"error": "NAS 설정을 먼저 완료하세요"}), 400
 
         recording_dir = config.recording_dir
-        transferred = []
-        errors = []
 
-        try:
-            from smbprotocol.connection import Connection
-            from smbprotocol.session import Session
-            from smbprotocol.tree import TreeConnect
-            from smbprotocol.open import Open, CreateDisposition, FileAttributes, \
-                ShareAccess, CreateOptions, FilePipePrinterAccessMask
-
-            conn = Connection(uuid.uuid4(), nas["server"], 445)
-            conn.connect()
-            sess = Session(conn, nas.get("username", ""), nas.get("password", ""))
-            sess.connect()
-            tree = TreeConnect(sess, f"\\\\{nas['server']}\\{nas['share']}")
-            tree.connect()
-
-            remote_dir = nas.get("remote_dir", "/").replace("/", "\\").strip("\\")
-
-            for rel_path in paths:
-                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
-                if not full_path.startswith(os.path.normpath(recording_dir)):
-                    errors.append(f"잘못된 경로: {rel_path}")
-                    continue
-
-                if not os.path.exists(full_path):
-                    errors.append(f"파일 없음: {rel_path}")
-                    continue
-
-                try:
-                    filename = os.path.basename(rel_path)
-                    remote_path = f"{remote_dir}\\{filename}" if remote_dir else filename
-
-                    file_open = Open(tree, remote_path)
-                    file_open.create(
-                        desired_access=FilePipePrinterAccessMask.GENERIC_WRITE,
-                        file_attributes=FileAttributes.FILE_ATTRIBUTE_NORMAL,
-                        share_access=ShareAccess.FILE_SHARE_WRITE,
-                        create_disposition=CreateDisposition.FILE_OVERWRITE_IF,
-                        create_options=CreateOptions.FILE_NON_DIRECTORY_FILE,
-                    )
-
-                    with open(full_path, "rb") as f:
-                        offset = 0
-                        while True:
-                            chunk = f.read(65536)
-                            if not chunk:
-                                break
-                            file_open.write(chunk, offset=offset)
-                            offset += len(chunk)
-
-                    file_open.close()
-                    transferred.append(rel_path)
-
-                    if action == "move":
-                        os.remove(full_path)
-                        if file_tracker:
-                            # Tracker에서 해당 파일 찾아서 상태 업데이트
-                            meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
-                            if meta:
-                                file_tracker.update_status(meta["id"], "NAS")
-
-                except Exception as e:
-                    errors.append(f"{rel_path}: {e}")
-
-            tree.disconnect()
-            conn.disconnect()
-
-        except Exception as e:
-            return jsonify({"error": f"NAS 연결 실패: {e}"}), 502
+        # 백그라운드 전송 기동
+        run_nas_transfer_in_background(paths, action, nas, recording_dir, file_tracker)
 
         return jsonify({
-            "transferred": transferred,
-            "errors": errors,
-            "action": action,
+            "status": "started",
+            "message": f"{len(paths)}개 파일의 NAS 전송({action})을 백그라운드에서 시작했습니다.",
+            "paths": paths
         })
 
     # =====================
@@ -496,83 +605,66 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
         folder_name = data.get("folder", "Radio Recordings")
 
         access_token = session.get("google_access_token")
-        if not access_token:
+        refresh_token = session.get("google_refresh_token")
+
+        # 세션에 refresh_token이 없고 파일에 백업이 있으면 로드
+        if not refresh_token:
+            import json
+            if os.path.exists("data/google_tokens.json"):
+                try:
+                    with open("data/google_tokens.json", "r") as f:
+                        saved = json.load(f)
+                        refresh_token = saved.get("refresh_token")
+                        if refresh_token:
+                            session["google_refresh_token"] = refresh_token
+                except Exception as e:
+                    logger.error(f"Refresh token file load failed: {e}")
+
+        if not access_token and not refresh_token:
             return jsonify({"error": "Google Drive 인증이 필요합니다. 재로그인 해주세요."}), 401
 
-        recording_dir = config.recording_dir
-        uploaded = []
-        errors = []
-
+        # Token 유효성 및 리프레시 검사
         try:
             from google.oauth2.credentials import Credentials
-            from googleapiclient.discovery import build
-            from googleapiclient.http import MediaFileUpload
+            from google.auth.transport.requests import Request
 
             creds = Credentials(
                 token=access_token,
-                refresh_token=session.get("google_refresh_token"),
+                refresh_token=refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",
                 client_id=config.google_client_id,
                 client_secret=config.google_client_secret,
             )
-            service = build("drive", "v3", credentials=creds)
 
-            # 폴더 찾기 또는 생성
-            folder_query = (
-                f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
-                f"and trashed=false"
-            )
-            results = service.files().list(q=folder_query, fields="files(id)").execute()
-            folders = results.get("files", [])
-
-            if folders:
-                folder_id = folders[0]["id"]
-            else:
-                folder_metadata = {
-                    "name": folder_name,
-                    "mimeType": "application/vnd.google-apps.folder",
-                }
-                folder = service.files().create(body=folder_metadata, fields="id").execute()
-                folder_id = folder["id"]
-
-            for rel_path in paths:
-                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
-                if not full_path.startswith(os.path.normpath(recording_dir)):
-                    errors.append(f"잘못된 경로: {rel_path}")
-                    continue
-
-                if not os.path.exists(full_path):
-                    errors.append(f"파일 없음: {rel_path}")
-                    continue
-
-                try:
-                    filename = os.path.basename(rel_path)
-                    file_metadata = {
-                        "name": filename,
-                        "parents": [folder_id],
-                    }
-                    media = MediaFileUpload(full_path, mimetype="audio/mpeg", resumable=True)
-                    drive_file = service.files().create(
-                        body=file_metadata, media_body=media, fields="id, webViewLink"
-                    ).execute()
-                    
-                    uploaded.append(rel_path)
-                    
-                    # 업로드 성공 후 로컬 파일 삭제 (이동 처리)
-                    os.remove(full_path)
-                    
-                    # Tracker 업데이트
-                    if file_tracker:
-                        meta = next((m for m in file_tracker.get_all_files() if m["filename"] == rel_path), None)
-                        if meta:
-                            file_tracker.update_status(meta["id"], "DRIVE", drive_url=drive_file.get("webViewLink"))
-                except Exception as e:
-                    errors.append(f"{rel_path}: {e}")
-
+            if not creds.valid:
+                if creds.expired and creds.refresh_token:
+                    logger.info("Drive Upload: access token expired, refreshing...")
+                    creds.refresh(Request())
+                    access_token = creds.token
+                    session["google_access_token"] = access_token
+                    # 파일 캐시도 업데이트
+                    import json
+                    try:
+                        with open("data/google_tokens.json", "w") as f:
+                            json.dump({"refresh_token": creds.refresh_token, "access_token": access_token}, f)
+                    except Exception as e:
+                        logger.error(f"Failed to update token file: {e}")
+                else:
+                    return jsonify({"error": "Google Drive 인증이 만료되었습니다. 재로그인 해주세요."}), 401
         except Exception as e:
-            return jsonify({"error": f"Google Drive 오류: {e}"}), 500
+            logger.error(f"Credentials validation error: {e}")
+            return jsonify({"error": f"인증 검증 실패: {e}"}), 401
 
-        return jsonify({"uploaded": uploaded, "errors": errors})
+        recording_dir = config.recording_dir
+
+        # 백그라운드 업로드 기동
+        run_drive_upload_in_background(paths, folder_name, access_token, refresh_token, recording_dir, file_tracker, config)
+
+        return jsonify({
+            "status": "started",
+            "message": f"{len(paths)}개 파일의 Google Drive 업로드를 백그라운드에서 시작했습니다.",
+            "paths": paths
+        })
 
     @app.route("/api/streams/test")
     @login_required

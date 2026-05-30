@@ -914,6 +914,13 @@ async function loadFiles() {
         selectedFiles.clear();
         renderFiles(allFiles);
         updateBulkBar();
+
+        // 전송 중인 파일이 있으면 3초 후 자동 새로고침
+        const hasTransferring = allFiles.some(f => f.status === 'TRANSFERRING');
+        if (hasTransferring) {
+            if (window.filesPollTimeout) clearTimeout(window.filesPollTimeout);
+            window.filesPollTimeout = setTimeout(loadFiles, 3000);
+        }
     } catch (e) {
         showToast('파일 목록 로드 실패', 'error');
     }
@@ -974,14 +981,17 @@ function renderFiles(files) {
                         <div style="margin-top: 8px;">
                             ${f.status === 'NAS' ? '<span class="status-badge" style="background:#4ade8020; color:#4ade80; padding:2px 8px; border-radius:12px; font-size:11px;">NAS</span>' : ''}
                             ${f.status === 'DRIVE' ? '<span class="status-badge" style="background:#facc1520; color:#facc15; padding:2px 8px; border-radius:12px; font-size:11px;">DRIVE</span>' : ''}
-                            <button class="btn btn-primary btn-sm" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" style="margin-left:8px;">
+                            ${f.status === 'TRANSFERRING' ? '<span class="status-badge transferring-badge" style="background:#8b5cf620; color:#c084fc; padding:2px 8px; border-radius:12px; font-size:11px; animation: blink 1.5s infinite;">⏳ 전송 중...</span>' : ''}
+                            <button class="btn btn-primary btn-sm" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" style="margin-left:8px;" ${f.status === 'TRANSFERRING' ? 'disabled style="opacity:0.5; pointer-events:none;"' : ''}>
                                 ▶ 재생하기
                             </button>
                         </div>
                     </div>
                     <div class="file-actions">
+                        ${f.status === 'TRANSFERRING' ? '<span style="font-size:12px; color:var(--text-muted);">대기</span>' : `
                         <a href="/recordings/${f.relative_path}" download class="btn btn-ghost btn-sm" title="다운로드">⬇️</a>
                         <button class="btn btn-ghost btn-sm" onclick="deleteFile('${f.relative_path}')" title="삭제">🗑️</button>
+                        `}
                     </div>
                 </div>
             `;
@@ -1098,14 +1108,14 @@ async function testNasConnection() {
 
 async function copySelectedToNas() {
     if (!selectedFiles.size) { showToast('파일을 선택하세요', 'error'); return; }
-    showToast(`${selectedFiles.size}개 파일 NAS 복사 중...`, 'info');
+    showToast(`${selectedFiles.size}개 파일 NAS 복사 요청 중...`, 'info');
     try {
         const data = await api('/api/storage/nas/transfer', {
             method: 'POST',
             body: JSON.stringify({ paths: [...selectedFiles], action: 'copy' }),
         });
-        showToast(`NAS 복사 완료: ${data.transferred.length}개`, 'success');
-        if (data.errors.length) console.error('NAS 전송 오류:', data.errors);
+        showToast(data.message || 'NAS 복사가 백그라운드에서 시작되었습니다.', 'success');
+        loadFiles();
     } catch (e) {
         showToast(`NAS 전송 실패: ${e.message}`, 'error');
     }
@@ -1114,13 +1124,13 @@ async function copySelectedToNas() {
 async function moveSelectedToNas() {
     if (!selectedFiles.size) { showToast('파일을 선택하세요', 'error'); return; }
     if (!confirm(`${selectedFiles.size}개 파일을 NAS로 이동합니다.\n원본은 삭제됩니다. 계속?`)) return;
-    showToast(`${selectedFiles.size}개 파일 NAS 이동 중...`, 'info');
+    showToast(`${selectedFiles.size}개 파일 NAS 이동 요청 중...`, 'info');
     try {
         const data = await api('/api/storage/nas/transfer', {
             method: 'POST',
             body: JSON.stringify({ paths: [...selectedFiles], action: 'move' }),
         });
-        showToast(`NAS 이동 완료: ${data.transferred.length}개`, 'success');
+        showToast(data.message || 'NAS 이동이 백그라운드에서 시작되었습니다.', 'success');
         loadFiles();
     } catch (e) {
         showToast(`NAS 전송 실패: ${e.message}`, 'error');
@@ -1132,16 +1142,15 @@ async function moveSelectedToNas() {
 // =============================================
 async function uploadSelectedToDrive() {
     if (!selectedFiles.size) { showToast('파일을 선택하세요', 'error'); return; }
-    showToast(`${selectedFiles.size}개 파일 Google Drive 업로드 중...`, 'info');
+    showToast(`${selectedFiles.size}개 파일 Google Drive 업로드 요청 중...`, 'info');
     try {
         const folderName = document.getElementById('drive-folder') ? document.getElementById('drive-folder').value : 'Radio Recordings';
         const data = await api('/api/storage/drive/upload', {
             method: 'POST',
             body: JSON.stringify({ paths: [...selectedFiles], folder: folderName }),
         });
-        showToast(`Drive 이동 완료: ${data.uploaded.length}개`, 'success');
+        showToast(data.message || 'Drive 업로드가 백그라운드에서 시작되었습니다.', 'success');
         loadFiles();
-        if (data.errors.length) console.error('Drive 업로드 오류:', data.errors);
     } catch (e) {
         showToast(`Drive 업로드 실패: ${e.message}`, 'error');
     }
