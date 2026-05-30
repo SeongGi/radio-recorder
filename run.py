@@ -157,7 +157,7 @@ def cmd_run_server(config):
     recorder.get_refresh_token_func = get_refresh_token
 
     scheduler = RecordingScheduler(config, resolver, recorder)
-    podcast = PodcastFeed(config)
+    podcast = PodcastFeed(config, file_tracker)
 
     # Flask 앱 생성
     app = create_app(config, stream_resolver=resolver, recorder=recorder, scheduler=scheduler, podcast_feed=podcast, file_tracker=file_tracker)

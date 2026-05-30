@@ -488,9 +488,35 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
         config.set_drive_config(drive_data)
         return jsonify({"success": True})
 
+    @app.route("/api/storage/drive/stream/<file_id>")
+    def api_drive_stream(file_id):
+        """Google Drive 파일 스트리밍 (리다이렉트)"""
+        token = request.args.get("token", "")
+        is_authenticated = (session.get("user") is not None) or (token == config.rss_token)
+        if not is_authenticated:
+            return "Unauthorized", 401
+
+        if not file_tracker:
+            return "File tracker not initialized", 500
+
+        meta = file_tracker.get_file(file_id)
+        if not meta or meta.get("status") != "DRIVE":
+            return "File not found on Drive", 404
+
+        drive_url = meta.get("drive_url")
+        if not drive_url:
+            return "Drive URL not found", 404
+
+        return redirect(drive_url)
+
     @app.route("/api/storage/nas/stream/<file_id>")
     def api_nas_stream(file_id):
         """NAS 파일 스트리밍"""
+        token = request.args.get("token", "")
+        is_authenticated = (session.get("user") is not None) or (token == config.rss_token)
+        if not is_authenticated:
+            return "Unauthorized", 401
+
         if not file_tracker:
             return "File tracker not initialized", 500
             
