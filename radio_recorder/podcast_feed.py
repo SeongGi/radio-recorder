@@ -5,7 +5,7 @@ Podcast RSS 피드 생성기
 
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from feedgen.feed import FeedGenerator
 
 logger = logging.getLogger(__name__)
@@ -145,11 +145,10 @@ class PodcastFeed:
             files.sort(key=lambda x: x["published"], reverse=True)
             
             # published를 timezone-aware datetime으로 보장하여 feedgen Extension 충돌 방지
-            import pytz
-            local_tz = pytz.timezone("Asia/Seoul")
+            local_tz = timezone(timedelta(hours=9))
             for f in files:
                 if f["published"].tzinfo is None:
-                    f["published"] = local_tz.localize(f["published"])
+                    f["published"] = f["published"].replace(tzinfo=local_tz)
             
             return files[:limit]
 
@@ -192,11 +191,10 @@ class PodcastFeed:
                 })
 
         files.sort(key=lambda x: x["published"], reverse=True)
-        import pytz
-        local_tz = pytz.timezone("Asia/Seoul")
+        local_tz = timezone(timedelta(hours=9))
         for f in files:
             if f["published"].tzinfo is None:
-                f["published"] = local_tz.localize(f["published"])
+                f["published"] = f["published"].replace(tzinfo=local_tz)
                 
         return files[:limit]
 
