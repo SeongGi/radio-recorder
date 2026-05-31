@@ -1437,3 +1437,136 @@ select.input {
         flex: 1;
     }
 }
+
+/* =============================================
+   Calendar View
+   ============================================= */
+.calendar-container {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.calendar-grid-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: minmax(90px, auto);
+    gap: 6px;
+}
+
+.calendar-day {
+    background-color: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    min-height: 90px;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.calendar-day.today {
+    border-color: var(--accent-blue);
+    background-color: rgba(59, 130, 246, 0.05);
+}
+
+.calendar-day.other-month {
+    opacity: 0.25;
+}
+
+.calendar-day-num {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.calendar-day.today .calendar-day-num {
+    color: var(--accent-blue);
+}
+
+.calendar-events {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow-y: auto;
+    max-height: 110px;
+    scrollbar-width: none;
+}
+
+.calendar-events::-webkit-scrollbar {
+    display: none;
+}
+
+.calendar-event {
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: #ffffff;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    transition: transform 0.1s;
+    user-select: none;
+}
+
+.calendar-event:hover {
+    transform: scale(1.03);
+    filter: brightness(1.1);
+}
+
+.calendar-event:active {
+    transform: scale(0.97);
+}
+
+/* Station/Network specific colors */
+.event-kbs { background-color: #2563eb; }
+.event-sbs { background-color: #ea580c; }
+.event-mbc { background-color: #059669; }
+.event-ebs { background-color: #7c3aed; }
+.event-tbs { background-color: #e11d48; }
+.event-cbs { background-color: #0284c7; }
+.event-wbs { background-color: #65a30d; }
+.event-cpbc { background-color: #c026d3; }
+.event-default { background-color: #4b5563; }
+
+/* Responsive adjustments for Calendar */
+@media (max-width: 768px) {
+    .calendar-grid {
+        grid-auto-rows: minmax(70px, auto);
+        gap: 4px;
+    }
+    
+    .calendar-day {
+        min-height: 70px;
+        padding: 4px;
+    }
+
+    .calendar-day-num {
+        font-size: 11px;
+    }
+
+    .calendar-event {
+        font-size: 9px;
+        padding: 1px 2px;
+    }
+}

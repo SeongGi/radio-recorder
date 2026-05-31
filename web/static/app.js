@@ -107,6 +107,7 @@ function initTabs() {
             // 탭 전환 시 데이터 새로고침
             if (tab.dataset.tab === 'files') loadFiles();
             if (tab.dataset.tab === 'schedules') loadSchedules();
+            if (tab.dataset.tab === 'calendar') loadCalendar();
         });
     });
 }
@@ -1269,4 +1270,136 @@ async function toggleAdDetection() {
         // 실패 시 원래 상태로 복원
         loadAdDetectionStatus();
     }
+}
+
+// =============================================
+// 녹음 캘린더 렌더링
+// =============================================
+let currentYear = new Date().getFullYear();
+let currentMonth = new Date().getMonth();
+
+async function loadCalendar() {
+    try {
+        allFiles = await api('/api/files');
+        renderCalendar();
+    } catch (e) {
+        showToast('캘린더 데이터 로드 실패', 'error');
+    }
+}
+
+function prevMonth() {
+    currentMonth--;
+    if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+    }
+    renderCalendar();
+}
+
+function nextMonth() {
+    currentMonth++;
+    if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+    }
+    renderCalendar();
+}
+
+function detectStation(filename) {
+    if (!stations) return null;
+    for (const [id, s] of Object.entries(stations)) {
+        const safeName = s.name.replace(/\s+/g, '_').replace(/\//g, '-');
+        if (filename.includes(safeName) || filename.includes(s.name) || filename.includes(id)) {
+            return s;
+        }
+    }
+    if (filename.includes('윤상')) return { network: 'EBS', name: '윤상-라디오' };
+    if (filename.includes('상순')) return { network: 'MBC', name: '상순씨-라디오' };
+    if (filename.includes('철수')) return { network: 'MBC', name: '배철수아저씨' };
+    
+    if (filename.includes('KBS')) return { network: 'KBS', name: 'KBS 라디오' };
+    if (filename.includes('MBC')) return { network: 'MBC', name: 'MBC 라디오' };
+    if (filename.includes('SBS')) return { network: 'SBS', name: 'SBS 라디오' };
+    if (filename.includes('EBS')) return { network: 'EBS', name: 'EBS 라디오' };
+    if (filename.includes('TBS')) return { network: 'TBS', name: 'TBS 교통방송' };
+    if (filename.includes('WBS')) return { network: 'WBS', name: 'WBS 원음방송' };
+    if (filename.includes('CBS')) return { network: 'CBS', name: 'CBS 라디오' };
+
+    return null;
+}
+
+function getEventColorClass(network) {
+    if (!network) return 'event-default';
+    const nw = network.toUpperCase();
+    if (nw.includes('KBS')) return 'event-kbs';
+    if (nw.includes('SBS')) return 'event-sbs';
+    if (nw.includes('MBC')) return 'event-mbc';
+    if (nw.includes('EBS')) return 'event-ebs';
+    if (nw.includes('TBS')) return 'event-tbs';
+    if (nw.includes('CBS')) return 'event-cbs';
+    if (nw.includes('WBS')) return 'event-wbs';
+    if (nw.includes('CPBC')) return 'event-cpbc';
+    return 'event-default';
+}
+
+function renderCalendar() {
+    const monthTitle = document.getElementById('calendar-month-title');
+    if (!monthTitle) return;
+    monthTitle.innerText = `${currentYear}년 ${currentMonth + 1}월`;
+
+    const daysContainer = document.getElementById('calendar-days');
+    if (!daysContainer) return;
+    daysContainer.innerHTML = '';
+
+    const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
+    const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const prevLastDay = new Date(currentYear, currentMonth, 0).getDate();
+
+    let daysHtml = '';
+
+    for (let i = firstDayIndex; i > 0; i--) {
+        const dayNum = prevLastDay - i + 1;
+        daysHtml += `<div class="calendar-day other-month"><div class="calendar-day-num">${dayNum}</div></div>`;
+    }
+
+    const today = new Date();
+    const isThisMonth = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
+
+    for (let day = 1; day <= lastDay; day++) {
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isToday = isThisMonth && today.getDate() === day;
+
+        const dayFiles = allFiles.filter(f => f.created && f.created.startsWith(dateStr));
+
+        let eventsHtml = '<div class="calendar-events">';
+        for (const f of dayFiles) {
+            const station = detectStation(f.filename);
+            const net = station ? station.network : '';
+            const colorClass = getEventColorClass(net);
+            const shortName = station ? station.name : f.filename.split('_')[0].split('/').pop();
+            const locationIcon = f.status === 'NAS' ? '📂' : (f.status === 'DRIVE' ? '☁️' : '🎵');
+            eventsHtml += `
+                <div class="calendar-event ${colorClass}" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" title="${f.filename} (${f.size_mb}MB)">
+                    <span>${locationIcon}</span>
+                    <span style="overflow:hidden; text-overflow:ellipsis;">${shortName}</span>
+                </div>
+            `;
+        }
+        eventsHtml += '</div>';
+
+        daysHtml += `
+            <div class="calendar-day ${isToday ? 'today' : ''}">
+                <div class="calendar-day-num">${day}</div>
+                ${eventsHtml}
+            </div>
+        `;
+    }
+
+    const totalCells = firstDayIndex + lastDay;
+    const remaining = totalCells % 7 === 0 ? 0 : 7 - (totalCells % 7);
+    for (let i = 1; i <= remaining; i++) {
+        daysHtml += `<div class="calendar-day other-month"><div class="calendar-day-num">${i}</div></div>`;
+    }
+
+    daysContainer.innerHTML = daysHtml;
 }

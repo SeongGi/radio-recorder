@@ -121,6 +121,44 @@
             color: var(--text-main);
         }
 
+        .custom-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .btn-control {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            color: var(--text-main);
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            outline: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        .btn-control:hover {
+            background-color: #334155;
+            border-color: var(--accent);
+            color: #60a5fa;
+            transform: scale(1.08);
+        }
+
+        .btn-control:active {
+            transform: scale(0.92);
+            background-color: #475569;
+        }
+
         @media (max-width: 480px) {
             .player-container {
                 padding: 24px 16px;
@@ -178,10 +216,33 @@
         </div>
     {% else %}
         {% set src = '/recordings/' + meta.filename if meta.status == 'LOCAL' else '/api/storage/nas/stream/' + meta.id %}
-        <audio controls autoplay>
+        <audio id="player-audio" controls autoplay>
             <source src="{{ src }}" type="audio/mpeg">
             브라우저가 오디오 재생을 지원하지 않습니다.
         </audio>
+
+        <div class="custom-controls">
+            <button class="btn-control" title="30초 뒤로"
+                    onmousedown="startContinuousSeek(-1, 30)" onmouseup="stopContinuousSeek()" onmouseleave="stopContinuousSeek()"
+                    ontouchstart="startContinuousSeek(-1, 30)" ontouchend="stopContinuousSeek()" ontouchcancel="stopContinuousSeek()">
+                <i class="ri-replay-30-line" style="font-size: 22px;"></i>
+            </button>
+            <button class="btn-control" title="10초 뒤로"
+                    onmousedown="startContinuousSeek(-1, 10)" onmouseup="stopContinuousSeek()" onmouseleave="stopContinuousSeek()"
+                    ontouchstart="startContinuousSeek(-1, 10)" ontouchend="stopContinuousSeek()" ontouchcancel="stopContinuousSeek()">
+                <i class="ri-replay-10-line" style="font-size: 20px;"></i>
+            </button>
+            <button class="btn-control" title="10초 앞으로"
+                    onmousedown="startContinuousSeek(1, 10)" onmouseup="stopContinuousSeek()" onmouseleave="stopContinuousSeek()"
+                    ontouchstart="startContinuousSeek(1, 10)" ontouchend="stopContinuousSeek()" ontouchcancel="stopContinuousSeek()">
+                <i class="ri-forward-10-line" style="font-size: 20px;"></i>
+            </button>
+            <button class="btn-control" title="30초 앞으로"
+                    onmousedown="startContinuousSeek(1, 30)" onmouseup="stopContinuousSeek()" onmouseleave="stopContinuousSeek()"
+                    ontouchstart="startContinuousSeek(1, 30)" ontouchend="stopContinuousSeek()" ontouchcancel="stopContinuousSeek()">
+                <i class="ri-forward-30-line" style="font-size: 22px;"></i>
+            </button>
+        </div>
     {% endif %}
 
     <button onclick="window.close()" class="btn-back">
@@ -190,6 +251,47 @@
 </div>
 
 <script>
+    const audio = document.getElementById('player-audio');
+    let seekInterval = null;
+    let longPressTimeout = null;
+
+    // 연속 감기/되감기 로직
+    function startContinuousSeek(direction, defaultSkip) {
+        // 이전에 도는 타이머가 있으면 정리
+        stopContinuousSeek();
+
+        if (!audio) return;
+
+        // 클릭(Tap)했을 때 즉시 1회 skip 수행
+        audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + direction * defaultSkip));
+
+        // 꾹 누르고 있을 때 가속화하는 타이머 설정 (300ms 이후부터 꾹 누르는 상태로 인지)
+        longPressTimeout = setTimeout(() => {
+            let speed = 5; // 처음엔 틱(150ms)당 5초씩 이동
+            let elapsed = 0;
+            const tick = 150;
+
+            seekInterval = setInterval(() => {
+                elapsed += tick;
+                if (elapsed > 1000) {
+                    speed = 15; // 1초 이상 누르고 있으면 가속 (틱당 15초 이동)
+                }
+                audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime + direction * speed));
+            }, tick);
+        }, 300);
+    }
+
+    function stopContinuousSeek() {
+        if (longPressTimeout) {
+            clearTimeout(longPressTimeout);
+            longPressTimeout = null;
+        }
+        if (seekInterval) {
+            clearInterval(seekInterval);
+            seekInterval = null;
+        }
+    }
+
     if ('mediaSession' in navigator) {
         const fileName = "{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }}";
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -201,6 +303,44 @@
                 { src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' }
             ]
         });
+
+        if (audio) {
+            // 재생 / 일시정지 등록
+            navigator.mediaSession.setActionHandler('play', () => audio.play());
+            navigator.mediaSession.setActionHandler('pause', () => audio.pause());
+
+            const skipTime = 30; // 기본 스킵 시간
+
+            // 차량 이전 곡/다음 곡 매핑 (30초 뒤/앞으로 스킵)
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                audio.currentTime = Math.max(audio.currentTime - skipTime, 0);
+            });
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                audio.currentTime = Math.min(audio.currentTime + skipTime, audio.duration);
+            });
+
+            // seekforward, seekbackward 이벤트 매핑 (차량 감기 버튼 홀드 또는 미디어 컨트롤 꾹 누르기 대응)
+            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                const offset = details.seekOffset || skipTime;
+                audio.currentTime = Math.max(audio.currentTime - offset, 0);
+            });
+            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                const offset = details.seekOffset || skipTime;
+                audio.currentTime = Math.min(audio.currentTime + offset, audio.duration);
+            });
+
+            try {
+                navigator.mediaSession.setActionHandler('seekto', (details) => {
+                    if (details.fastSeek && ('fastSeek' in audio)) {
+                        audio.fastSeek(details.seekTime);
+                    } else {
+                        audio.currentTime = details.seekTime;
+                    }
+                });
+            } catch (error) {
+                console.log('seekto action handler not supported');
+            }
+        }
     }
 </script>
 </body>
