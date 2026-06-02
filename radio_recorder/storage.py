@@ -87,7 +87,7 @@ class StorageManager:
             )
             service = build("drive", "v3", credentials=creds)
 
-            folder_name = self.config.google_drive_folder
+            folder_name = self.config.drive_config.get("folder", "Radio Recordings")
             folder_query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
             results = service.files().list(q=folder_query, fields="files(id)").execute()
             folders = results.get("files", [])

@@ -17,7 +17,7 @@ spec:
       initContainers:
         - name: init-config
           image: busybox
-          command: ['sh', '-c', 'cp /app/init-config/config.yaml /app/data/config.yaml']
+          command: ['sh', '-c', '[ ! -f /app/data/config.yaml ] && cp /app/init-config/config.yaml /app/data/config.yaml || echo "Config file already exists, skipping copy"']
           volumeMounts:
             - name: data
               mountPath: /app/data
@@ -38,6 +38,9 @@ spec:
               mountPath: /app/recordings
             - name: data
               mountPath: /app/data
+            - name: config
+              mountPath: /app/init-config/config.yaml
+              subPath: config.yaml
           env:
             - name: AUTHLIB_INSECURE_TRANSPORT
               value: "1"

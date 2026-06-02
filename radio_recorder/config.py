@@ -59,14 +59,30 @@ class Config:
 
     def load(self):
         """config.yaml 파일을 로드합니다."""
+        # 1. 먼저 기본값(DEFAULT_CONFIG) 설정
+        self._data = DEFAULT_CONFIG.copy()
+
+        # 2. 만약 /app/init-config/config.yaml이 존재하면 먼저 병합 (ConfigMap의 최신 방송국 정보 등 반영)
+        init_config_path = "/app/init-config/config.yaml"
+        if os.path.exists(init_config_path):
+            try:
+                with open(init_config_path, "r", encoding="utf-8") as f:
+                    init_data = yaml.safe_load(f) or {}
+                self._data = self._deep_merge(self._data, init_data)
+                logger.info(f"초기 템플릿 설정을 병합했습니다: {init_config_path}")
+            except Exception as e:
+                logger.error(f"초기 템플릿 설정 병합 실패: {e}")
+
+        # 3. 그 다음 활성 설정 파일(self.config_path)이 존재하면 병합 (사용자 저장 설정: 스케줄, 토큰 등)
         if os.path.exists(self.config_path):
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                file_data = yaml.safe_load(f) or {}
-            # 기본값과 병합 (파일 값이 우선)
-            self._data = self._deep_merge(DEFAULT_CONFIG, file_data)
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    file_data = yaml.safe_load(f) or {}
+                self._data = self._deep_merge(self._data, file_data)
+            except Exception as e:
+                logger.error(f"활성 설정 파일 로드 실패: {e}")
         else:
             logger.warning(f"설정 파일을 찾을 수 없습니다: {self.config_path}")
-            self._data = DEFAULT_CONFIG.copy()
 
         # RSS 토큰 자동 생성
         if not self._data["auth"].get("rss_token"):
