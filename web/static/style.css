@@ -1570,3 +1570,165 @@ select.input {
         padding: 1px 2px;
     }
 }
+
+/* =============================================
+   Calendar Day Click & Details list styling
+   ============================================= */
+.calendar-day {
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.calendar-day:hover {
+    border-color: rgba(74, 158, 255, 0.4);
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.calendar-day.selected {
+    border-color: var(--accent-blue);
+    background-color: rgba(74, 158, 255, 0.08);
+    box-shadow: 0 0 12px rgba(74, 158, 255, 0.2);
+}
+
+.calendar-details-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-top: 24px;
+    animation: fadeIn 0.3s ease;
+}
+
+/* =============================================
+   Stats Tab - summary and accordion
+   ============================================= */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stats-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.stats-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow);
+}
+
+.stats-card.expanded {
+    border-color: rgba(74, 158, 255, 0.3);
+}
+
+.stats-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+}
+
+.stats-station-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.stats-network-badge {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.stats-arrow {
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+}
+
+.stats-card.expanded .stats-arrow {
+    transform: rotate(180deg);
+}
+
+.stats-card-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.stats-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.stats-meta-label {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.stats-meta-val {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.stats-file-list {
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+}
+
+.stats-file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.01);
+    border: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.stats-file-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.04);
+}
+
+.stats-file-item.clean-file {
+    border-left: 3px solid var(--accent-green);
+}
+
+.stats-file-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+

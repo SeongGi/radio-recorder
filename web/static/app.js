@@ -108,6 +108,7 @@ function initTabs() {
             if (tab.dataset.tab === 'files') loadFiles();
             if (tab.dataset.tab === 'schedules') loadSchedules();
             if (tab.dataset.tab === 'calendar') loadCalendar();
+            if (tab.dataset.tab === 'stats') loadStats();
         });
     });
 }
@@ -909,9 +910,10 @@ function startStatusPolling() {
 // =============================================
 let allFiles = [];
 
-async function loadFiles() {
+async function loadFiles(forceSync = false) {
     try {
-        allFiles = await api('/api/files');
+        const url = forceSync ? '/api/files?sync=true' : '/api/files';
+        allFiles = await api(url);
         selectedFiles.clear();
         renderFiles(allFiles);
         updateBulkBar();
@@ -1351,6 +1353,10 @@ function renderCalendar() {
     if (!daysContainer) return;
     daysContainer.innerHTML = '';
 
+    // 월 변경 시 상세 정보 패널 숨기기
+    const panel = document.getElementById('calendar-details-panel');
+    if (panel) panel.style.display = 'none';
+
     const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
     const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
     const prevLastDay = new Date(currentYear, currentMonth, 0).getDate();
@@ -1379,7 +1385,7 @@ function renderCalendar() {
             const shortName = station ? station.name : f.filename.split('_')[0].split('/').pop();
             const locationIcon = f.status === 'NAS' ? '📂' : (f.status === 'DRIVE' ? '☁️' : '🎵');
             eventsHtml += `
-                <div class="calendar-event ${colorClass}" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" title="${f.filename} (${f.size_mb}MB)">
+                <div class="calendar-event ${colorClass}" onclick="event.stopPropagation(); window.open('/play/${f.id}', 'Player', 'width=500,height=600')" title="${f.filename} (${f.size_mb}MB)">
                     <span>${locationIcon}</span>
                     <span style="overflow:hidden; text-overflow:ellipsis;">${shortName}</span>
                 </div>
@@ -1388,7 +1394,7 @@ function renderCalendar() {
         eventsHtml += '</div>';
 
         daysHtml += `
-            <div class="calendar-day ${isToday ? 'today' : ''}">
+            <div class="calendar-day ${isToday ? 'today' : ''}" onclick="selectCalendarDay('${dateStr}', this)">
                 <div class="calendar-day-num">${day}</div>
                 ${eventsHtml}
             </div>
@@ -1402,4 +1408,237 @@ function renderCalendar() {
     }
 
     daysContainer.innerHTML = daysHtml;
+}
+
+// =============================================
+// 캘린더 날짜 클릭 및 상세 목록 노출
+// =============================================
+function selectCalendarDay(dateStr, element) {
+    document.querySelectorAll('.calendar-day').forEach(d => d.classList.remove('selected'));
+    if (element) {
+        element.classList.add('selected');
+    }
+
+    const dayFiles = allFiles.filter(f => f.created && f.created.startsWith(dateStr));
+    const panel = document.getElementById('calendar-details-panel');
+    const container = document.getElementById('calendar-day-files');
+    const titleSpan = document.getElementById('selected-day-title');
+
+    if (titleSpan) titleSpan.textContent = dateStr;
+
+    if (!dayFiles.length) {
+        container.innerHTML = `
+            <div class="empty-state" style="padding: 20px;">
+                <p style="margin: 0; color: var(--text-muted);">해당 날짜에 녹음된 파일이 없습니다.</p>
+            </div>
+        `;
+    } else {
+        let html = '';
+        for (const f of dayFiles) {
+            const isClean = f.filename.includes('_clean');
+            html += `
+                <div class="file-item ${isClean ? 'clean-file' : ''}">
+                    <div class="file-icon">${isClean ? '✨' : '🎵'}</div>
+                    <div class="file-info">
+                        <div class="file-name">${f.filename}</div>
+                        <div class="file-meta">${f.size_mb}MB · ${formatDate(f.created)}</div>
+                        <div style="margin-top: 8px;">
+                            ${f.status === 'NAS' ? '<span class="status-badge" style="background:#4ade8020; color:#4ade80; padding:2px 8px; border-radius:12px; font-size:11px;">NAS</span>' : ''}
+                            ${f.status === 'DRIVE' ? '<span class="status-badge" style="background:#facc1520; color:#facc15; padding:2px 8px; border-radius:12px; font-size:11px;">DRIVE</span>' : ''}
+                            ${f.status === 'TRANSFERRING' ? '<span class="status-badge transferring-badge" style="background:#8b5cf620; color:#c084fc; padding:2px 8px; border-radius:12px; font-size:11px; animation: blink 1.5s infinite;">⏳ 전송 중...</span>' : ''}
+                            <button class="btn btn-primary btn-sm" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" style="margin-left:8px;" ${f.status === 'TRANSFERRING' ? 'disabled style="opacity:0.5; pointer-events:none;"' : ''}>
+                                ▶ 재생하기
+                             </button>
+                        </div>
+                    </div>
+                    <div class="file-actions">
+                        ${f.status === 'TRANSFERRING' ? '<span style="font-size:12px; color:var(--text-muted);">대기</span>' : `
+                        <a href="/recordings/${f.relative_path}" download class="btn btn-ghost btn-sm" title="다운로드">⬇️</a>
+                        <button class="btn btn-ghost btn-sm" onclick="deleteCalendarDayFile('${f.relative_path}', '${dateStr}', this)" title="삭제">🗑️</button>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    }
+    panel.style.display = 'block';
+}
+
+async function deleteCalendarDayFile(path, dateStr, element) {
+    if (!confirm(`이 파일을 삭제하시겠습니까?\n${path}`)) return;
+    try {
+        const data = await api('/api/files', {
+            method: 'DELETE',
+            body: JSON.stringify({ paths: [path] }),
+        });
+        showToast(`${data.deleted.length}개 삭제 완료`, 'success');
+        
+        // 데이터 다시 로드 및 달력 업데이트
+        allFiles = await api('/api/files');
+        renderCalendar();
+        
+        // 해당 날짜 셀 찾아서 다시 포커스 및 상세 노출 갱신
+        const dayNum = parseInt(dateStr.split('-')[2]);
+        const days = document.querySelectorAll('.calendar-day:not(.other-month)');
+        let targetEl = null;
+        for (const d of days) {
+            const numEl = d.querySelector('.calendar-day-num');
+            if (numEl && parseInt(numEl.textContent) === dayNum) {
+                targetEl = d;
+                break;
+            }
+        }
+        selectCalendarDay(dateStr, targetEl);
+    } catch (e) {
+        showToast('삭제 실패', 'error');
+    }
+}
+
+// =============================================
+// 통계 및 방송사별 모아듣기
+// =============================================
+async function loadStats() {
+    try {
+        allFiles = await api('/api/files');
+        renderStats();
+    } catch (e) {
+        showToast('통계 데이터 로드 실패', 'error');
+    }
+}
+
+function renderStats() {
+    const container = document.getElementById('stats-grid');
+    if (!container) return;
+
+    if (!allFiles || !allFiles.length) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📊</div>
+                <p>통계를 생성할 녹음 파일이 없습니다</p>
+            </div>
+        `;
+        return;
+    }
+
+    // 방송국별 그룹 생성
+    const groups = {};
+    for (const f of allFiles) {
+        const station = detectStation(f.filename);
+        const sName = station ? station.name : '기타 방송';
+        const network = station ? station.network : 'OTHER';
+        if (!groups[sName]) {
+            groups[sName] = {
+                stationName: sName,
+                network: network,
+                files: []
+            };
+        }
+        groups[sName].files.push(f);
+    }
+
+    // 파일 개수가 많은 순으로 정렬
+    const sortedGroups = Object.values(groups).sort((a, b) => b.files.length - a.files.length);
+
+    let html = '';
+    for (const g of sortedGroups) {
+        const fileCount = g.files.length;
+        const totalSizeMb = g.files.reduce((sum, f) => sum + (f.size_mb || 0), 0);
+        const sizeStr = totalSizeMb >= 1024 
+            ? `${(totalSizeMb / 1024).toFixed(2)} GB` 
+            : `${totalSizeMb.toFixed(1)} MB`;
+
+        const dates = g.files.map(f => f.created).filter(Boolean).sort();
+        let dateRangeStr = '-';
+        if (dates.length > 0) {
+            const oldest = dates[0].substring(0, 10);
+            const newest = dates[dates.length - 1].substring(0, 10);
+            dateRangeStr = oldest === newest ? oldest : `${oldest} ~ ${newest}`;
+        }
+
+        // 각 방송국 내 파일 최신 등록일 역순 정렬
+        g.files.sort((a, b) => {
+            if (!a.created) return 1;
+            if (!b.created) return -1;
+            return b.created.localeCompare(a.created);
+        });
+
+        const netClass = g.network.toLowerCase();
+
+        let filesHtml = '';
+        for (const f of g.files) {
+            const isClean = f.filename.includes('_clean');
+            filesHtml += `
+                <div class="stats-file-item ${isClean ? 'clean-file' : ''}">
+                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                        <span style="font-size: 14px;">${isClean ? '✨' : '🎵'}</span>
+                        <div style="min-width: 0; flex: 1;">
+                            <div class="stats-file-name" title="${f.filename}">${f.filename}</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
+                                ${f.size_mb}MB · ${formatDate(f.created)}
+                                ${f.status === 'NAS' ? ' <span class="status-badge" style="background:#4ade8020; color:#4ade80; padding:1px 6px; border-radius:8px; font-size:10px;">NAS</span>' : ''}
+                                ${f.status === 'DRIVE' ? ' <span class="status-badge" style="background:#facc1520; color:#facc15; padding:1px 6px; border-radius:8px; font-size:10px;">DRIVE</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')">
+                        ▶ 재생
+                    </button>
+                </div>
+            `;
+        }
+
+        const safeId = 'stats-' + g.stationName.replace(/[^a-zA-Z0-9가-힣]/g, '-');
+
+        html += `
+            <div class="stats-card" id="card-${safeId}">
+                <div class="stats-card-header" onclick="toggleStatsAccordion('${safeId}')">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div class="station-dot ${netClass}" style="flex-shrink: 0; width: 32px; height: 32px; font-size: 14px;">${g.network[0] || '기'}</div>
+                        <div>
+                            <h3 class="stats-station-title">${g.stationName}</h3>
+                            <span class="stats-network-badge">${g.network}</span>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="stats-arrow">▼</span>
+                    </div>
+                </div>
+                <div class="stats-card-meta">
+                    <div class="stats-meta-item">
+                        <span class="stats-meta-label">녹음 파일</span>
+                        <span class="stats-meta-val">${fileCount}개</span>
+                    </div>
+                    <div class="stats-meta-item">
+                        <span class="stats-meta-label">총 용량</span>
+                        <span class="stats-meta-val">${sizeStr}</span>
+                    </div>
+                    <div class="stats-meta-item" style="grid-column: span 2;">
+                        <span class="stats-meta-label">보관 기간</span>
+                        <span class="stats-meta-val" style="font-size: 11px;">${dateRangeStr}</span>
+                    </div>
+                </div>
+                <div class="stats-file-list" id="list-${safeId}" style="display: none;">
+                    ${filesHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+function toggleStatsAccordion(safeId) {
+    const list = document.getElementById(`list-${safeId}`);
+    const card = document.getElementById(`card-${safeId}`);
+    if (!list || !card) return;
+
+    const isOpen = list.style.display !== 'none';
+    if (isOpen) {
+        list.style.display = 'none';
+        card.classList.remove('expanded');
+    } else {
+        list.style.display = 'block';
+        card.classList.add('expanded');
+    }
 }

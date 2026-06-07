@@ -69,6 +69,7 @@
         <button class="tab" data-tab="recording">🔴 녹음</button>
         <button class="tab" data-tab="files">📁 파일</button>
         <button class="tab" data-tab="calendar">📅 캘린더</button>
+        <button class="tab" data-tab="stats">📊 통계</button>
         <button class="tab" data-tab="settings">⚙️ 설정</button>
     </nav>
 
@@ -149,7 +150,7 @@
             <div class="section-header">
                 <h2>녹음 파일</h2>
                 <div style="display:flex; gap:8px; align-items:center;">
-                    <button class="btn btn-ghost btn-sm" onclick="loadFiles()">🔄 새로고침</button>
+                    <button class="btn btn-ghost btn-sm" onclick="loadFiles(true)">🔄 새로고침</button>
                 </div>
             </div>
 
@@ -188,6 +189,23 @@
                 </div>
                 <div class="calendar-grid" id="calendar-days"></div>
             </div>
+
+            <!-- 선택된 날짜의 상세 녹음 파일 목록 -->
+            <div class="calendar-details-panel" id="calendar-details-panel" style="display: none; margin-top: 24px;">
+                <div class="section-header" style="border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px;">
+                    <h3 style="margin: 0; font-size: 16px;"><span id="selected-day-title"></span> 녹음 목록</h3>
+                </div>
+                <div class="file-list" id="calendar-day-files"></div>
+            </div>
+        </section>
+
+        <!-- 통계 및 모아듣기 탭 -->
+        <section class="tab-panel" id="panel-stats">
+            <div class="section-header">
+                <h2>방송 요약 및 모아듣기</h2>
+                <span class="text-muted" style="font-size:13px">보관 중인 방송사별 녹음 파일 통계와 모아듣기 목록입니다</span>
+            </div>
+            <div class="stats-grid" id="stats-grid"></div>
         </section>
 
         <!-- 설정 탭 -->

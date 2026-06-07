@@ -379,8 +379,9 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
     def api_files():
         """녹음 파일 목록"""
         if file_tracker:
-            # DB 동기화 후 반환
-            file_tracker.sync_with_local_dir(config.recording_dir)
+            # sync=true 파라미터가 있을 때만 동기화 수행 (지연 방지)
+            if request.args.get("sync") == "true":
+                file_tracker.sync_with_local_dir(config.recording_dir)
             files = file_tracker.get_all_files()
             # UI 호환성을 위해 relative_path 추가
             for f in files:
