@@ -383,10 +383,16 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
             if request.args.get("sync") == "true":
                 file_tracker.sync_with_local_dir(config.recording_dir)
             files = file_tracker.get_all_files()
+            active_paths = set()
+            for job in recorder.get_active_jobs():
+                output_path = job.get("output_path")
+                if output_path:
+                    active_paths.add(os.path.normpath(os.path.relpath(output_path, config.recording_dir)))
             # UI 호환성을 위해 relative_path 추가
             for f in files:
                 f["relative_path"] = f["filename"]
                 f["size_mb"] = round(f.get("size_bytes", 0) / (1024 * 1024), 2)
+                f["is_recording"] = os.path.normpath(f["filename"]) in active_paths
             return jsonify(files)
         return jsonify(recorder.get_recording_files())
 
@@ -394,16 +400,38 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
     @login_required
     def api_delete_files():
         """파일 삭제 (단일/다중)"""
-        data = request.json
+        data = request.get_json(silent=True) or {}
         paths = data.get("paths", [])
-        if not paths:
+        if not isinstance(paths, list) or not paths:
             return jsonify({"error": "삭제할 파일을 선택하세요"}), 400
+        if len(paths) > 5000:
+            return jsonify({"error": "한 번에 삭제할 수 있는 파일은 5000개까지입니다"}), 400
 
         deleted = []
         errors = []
-        recording_dir = config.recording_dir
+        recording_dir = os.path.realpath(config.recording_dir)
+        active_paths = {
+            os.path.realpath(job["output_path"])
+            for job in recorder.get_active_jobs()
+            if job.get("output_path")
+        }
+
+        def remove_empty_parent_dirs(file_path):
+            """삭제된 파일의 빈 상위 폴더를 녹음 루트까지 정리합니다."""
+            parent = os.path.dirname(file_path)
+            while parent != recording_dir:
+                try:
+                    if os.path.commonpath([recording_dir, parent]) != recording_dir:
+                        break
+                    os.rmdir(parent)
+                except (OSError, ValueError):
+                    break
+                parent = os.path.dirname(parent)
 
         for rel_path in paths:
+            if not isinstance(rel_path, str) or not rel_path:
+                errors.append("잘못된 파일 경로")
+                continue
             # Tracker에서 메타데이터 찾기
             meta = None
             if file_tracker:
@@ -411,14 +439,22 @@ def create_app(config, stream_resolver, recorder, scheduler, podcast_feed, file_
 
             # 로컬 파일인 경우
             if not meta or meta.get("status") == "LOCAL":
-                full_path = os.path.normpath(os.path.join(recording_dir, rel_path))
-                if not full_path.startswith(os.path.normpath(recording_dir)):
+                full_path = os.path.realpath(os.path.join(recording_dir, rel_path))
+                try:
+                    is_inside = os.path.commonpath([recording_dir, full_path]) == recording_dir
+                except ValueError:
+                    is_inside = False
+                if not is_inside:
                     errors.append(f"잘못된 경로: {rel_path}")
+                    continue
+                if full_path in active_paths:
+                    errors.append(f"녹음 중이므로 삭제하지 않음: {rel_path}")
                     continue
 
                 if os.path.exists(full_path):
                     try:
                         os.remove(full_path)
+                        remove_empty_parent_dirs(full_path)
                         deleted.append(rel_path)
                         if file_tracker and meta:
                             file_tracker.delete_file(meta["id"])

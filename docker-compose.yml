@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: radio-recorder-compose:latest
+    container_name: radio-recorder
+    restart: unless-stopped
+    command: ["python", "run.py", "--config", "/app/data/config.yaml"]
+    environment:
+      AUTHLIB_INSECURE_TRANSPORT: "1"
+    ports:
+      - "${HOST_PORT:-8084}:8080"
+    volumes:
+      - ${RECORDINGS_DIR:-/Volumes/mac-disk-ex/radio-recordings}:/app/recordings
+      - ./data/radio-data:/app/data
+      - ./config.yaml:/app/init-config/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), 3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

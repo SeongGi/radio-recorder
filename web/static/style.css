@@ -1,5 +1,5 @@
 /* =============================================
-   Radio Recorder - Premium Dark Mode UI
+   Radio Recorder - Blue Light / Dark UI
    ============================================= */
 
 :root {
@@ -16,8 +16,10 @@
     --text-secondary: #9898a8;
     --text-muted: #5a5a6e;
 
-    --accent-blue: #4a9eff;
-    --accent-purple: #7c3aed;
+    --accent-blue: #2563eb;
+    --accent-blue-hover: #1d4ed8;
+    --accent-soft: rgba(37, 99, 235, 0.12);
+    --accent-purple: #2563eb;
     --accent-pink: #ec4899;
     --accent-green: #10b981;
     --accent-red: #ef4444;
@@ -42,6 +44,23 @@
     --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.4);
 
     --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+    --bg-primary: #f4f7fb;
+    --bg-secondary: rgba(255, 255, 255, 0.92);
+    --bg-tertiary: #eaf0f8;
+    --bg-card: rgba(255, 255, 255, 0.94);
+    --bg-card-hover: #ffffff;
+    --border: rgba(15, 23, 42, 0.10);
+    --border-hover: rgba(37, 99, 235, 0.28);
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --shadow: 0 4px 24px rgba(15, 23, 42, 0.08);
+    --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.12);
+    color-scheme: light;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -84,11 +103,37 @@ body {
 .header-title {
     font-size: 20px;
     font-weight: 700;
-    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    background: linear-gradient(135deg, var(--accent-blue), #60a5fa);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
+
+.theme-toggle {
+    width: 38px;
+    height: 38px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 17px;
+}
+
+.theme-toggle:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+:root[data-theme="light"] .header-logo { filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.2)); }
+:root[data-theme="light"] .header,
+:root[data-theme="light"] .tabs { box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04); }
+:root[data-theme="light"] .file-group-header:hover,
+:root[data-theme="light"] .file-item:hover,
+:root[data-theme="light"] .stats-file-item:hover { background: rgba(37, 99, 235, 0.05); }
+:root[data-theme="light"] .file-item,
+:root[data-theme="light"] .stats-file-item { border-color: rgba(15, 23, 42, 0.07); }
+:root[data-theme="light"] .live-player-bar { background: rgba(255, 255, 255, 0.96); }
+:root[data-theme="light"] .modal-overlay { background: rgba(15, 23, 42, 0.35); }
 
 .header-right {
     display: flex;
@@ -1221,6 +1266,20 @@ select.input {
 }
 
 /* Bulk Action Bar */
+.file-search-bar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto auto auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.file-search-result {
+    color: var(--text-secondary);
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 .bulk-action-bar {
     display: flex;
     align-items: center;
@@ -1422,6 +1481,15 @@ select.input {
         align-items: stretch;
         gap: 12px;
         padding: 14px;
+    }
+
+    .file-search-bar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .file-search-bar .input,
+    .file-search-result {
+        grid-column: 1 / -1;
     }
     
     .bulk-info {
@@ -1731,4 +1799,3 @@ select.input {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-

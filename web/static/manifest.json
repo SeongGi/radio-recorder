@@ -4,8 +4,8 @@
   "description": "한국 라디오 예약 녹음 및 라이브 청취",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#0a0a0f",
+  "background_color": "#f4f7fb",
+  "theme_color": "#2563eb",
   "orientation": "any",
   "icons": [
     {

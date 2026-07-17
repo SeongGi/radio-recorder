@@ -21,6 +21,7 @@ let liveRetryCount = 0; // 스트림 실패 재시도 횟수
 const MAX_LIVE_RETRIES = 3; // 최대 재시도 횟수
 
 document.addEventListener('DOMContentLoaded', () => {
+    updateThemeControl();
     initTabs();
     loadStations().then(() => {
         renderLiveStations();
@@ -34,6 +35,22 @@ document.addEventListener('DOMContentLoaded', () => {
     loadNasConfig();
     loadDriveConfig();
 });
+
+function toggleTheme() {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('radio-theme', next);
+    updateThemeControl();
+}
+
+function updateThemeControl() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    const button = document.getElementById('theme-toggle');
+    if (button) {
+        button.textContent = dark ? '☀️' : '🌙';
+        button.title = dark ? '라이트 모드로 전환' : '다크 모드로 전환';
+    }
+}
 
 // =============================================
 // PWA 초기화
@@ -909,13 +926,15 @@ function startStatusPolling() {
 // 파일 관리
 // =============================================
 let allFiles = [];
+let filteredFiles = [];
 
 async function loadFiles(forceSync = false) {
     try {
         const url = forceSync ? '/api/files?sync=true' : '/api/files';
         allFiles = await api(url);
+        filteredFiles = allFiles;
         selectedFiles.clear();
-        renderFiles(allFiles);
+        filterFiles();
         updateBulkBar();
 
         // 전송 중인 파일이 있으면 3초 후 자동 새로고침
@@ -951,13 +970,13 @@ function renderFiles(files) {
     }
 
     const sortedDates = Object.keys(groups).sort().reverse();
-    let totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
+    let totalSize = files.reduce((sum, f) => sum + (f.size_bytes || f.size || 0), 0);
 
     let html = `<div class="file-summary">${files.length}개 파일 · ${(totalSize / 1024 / 1024).toFixed(1)}MB</div>`;
 
     for (const date of sortedDates) {
         const dateFiles = groups[date];
-        const dateSize = dateFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+        const dateSize = dateFiles.reduce((sum, f) => sum + (f.size_bytes || f.size || 0), 0);
 
         html += `
             <div class="file-group">
@@ -972,28 +991,32 @@ function renderFiles(files) {
         for (const f of dateFiles) {
             const checked = selectedFiles.has(f.relative_path) ? 'checked' : '';
             const isClean = f.filename.includes('_clean');
+            const isRecording = Boolean(f.is_recording);
+            const encodedPath = encodeURIComponent(f.relative_path);
+            const downloadPath = f.relative_path.split('/').map(encodeURIComponent).join('/');
             html += `
                 <div class="file-item ${isClean ? 'clean-file' : ''}">
                     <label class="checkbox-wrap">
-                        <input type="checkbox" ${checked} onchange="toggleFileSelect('${f.relative_path}')">
+                        <input type="checkbox" ${checked} ${isRecording ? 'disabled' : ''} onchange="toggleFileSelect(decodeURIComponent('${encodedPath}'))">
                     </label>
                     <div class="file-icon">${isClean ? '✨' : '🎵'}</div>
                     <div class="file-info">
-                        <div class="file-name">${f.filename}</div>
+                        <div class="file-name">${escapeHtml(f.filename)}</div>
                         <div class="file-meta">${f.size_mb}MB · ${formatDate(f.created)}</div>
                         <div style="margin-top: 8px;">
                             ${f.status === 'NAS' ? '<span class="status-badge" style="background:#4ade8020; color:#4ade80; padding:2px 8px; border-radius:12px; font-size:11px;">NAS</span>' : ''}
                             ${f.status === 'DRIVE' ? '<span class="status-badge" style="background:#facc1520; color:#facc15; padding:2px 8px; border-radius:12px; font-size:11px;">DRIVE</span>' : ''}
                             ${f.status === 'TRANSFERRING' ? '<span class="status-badge transferring-badge" style="background:#8b5cf620; color:#c084fc; padding:2px 8px; border-radius:12px; font-size:11px; animation: blink 1.5s infinite;">⏳ 전송 중...</span>' : ''}
+                            ${isRecording ? '<span class="status-badge transferring-badge" style="background:#ef444420; color:#f87171; padding:2px 8px; border-radius:12px; font-size:11px;">🔴 녹음 중</span>' : ''}
                             <button class="btn btn-primary btn-sm" onclick="window.open('/play/${f.id}', 'Player', 'width=500,height=600')" style="margin-left:8px;" ${f.status === 'TRANSFERRING' ? 'disabled style="opacity:0.5; pointer-events:none;"' : ''}>
                                 ▶ 재생하기
                             </button>
                         </div>
                     </div>
                     <div class="file-actions">
-                        ${f.status === 'TRANSFERRING' ? '<span style="font-size:12px; color:var(--text-muted);">대기</span>' : `
-                        <a href="/recordings/${f.relative_path}" download class="btn btn-ghost btn-sm" title="다운로드">⬇️</a>
-                        <button class="btn btn-ghost btn-sm" onclick="deleteFile('${f.relative_path}')" title="삭제">🗑️</button>
+                        ${f.status === 'TRANSFERRING' || isRecording ? '<span style="font-size:12px; color:var(--text-muted);">삭제 제외</span>' : `
+                        <a href="/recordings/${downloadPath}" download class="btn btn-ghost btn-sm" title="다운로드">⬇️</a>
+                        <button class="btn btn-ghost btn-sm" onclick="deleteFile(decodeURIComponent('${encodedPath}'))" title="삭제">🗑️</button>
                         `}
                     </div>
                 </div>
@@ -1004,6 +1027,57 @@ function renderFiles(files) {
     }
 
     container.innerHTML = html;
+}
+
+function escapeHtml(value) {
+    const el = document.createElement('div');
+    el.textContent = String(value ?? '');
+    return el.innerHTML;
+}
+
+function filterFiles() {
+    const input = document.getElementById('file-search');
+    const query = (input?.value || '').trim().toLocaleLowerCase();
+    filteredFiles = query ? allFiles.filter(f => {
+        const haystack = [f.filename, f.created, f.status, f.relative_path]
+            .filter(Boolean).join(' ').toLocaleLowerCase();
+        return haystack.includes(query);
+    }) : allFiles;
+    renderFiles(filteredFiles);
+    const result = document.getElementById('file-search-result');
+    if (result) result.textContent = query ? `${filteredFiles.length}개 검색됨` : `전체 ${allFiles.length}개`;
+    updateBulkBar();
+}
+
+function selectSearchResults() {
+    if (!filteredFiles.length) { showToast('검색 결과가 없습니다', 'error'); return; }
+    filteredFiles.filter(f => !f.is_recording).forEach(f => selectedFiles.add(f.relative_path));
+    renderFiles(filteredFiles);
+    updateBulkBar();
+}
+
+async function deleteSearchResults() {
+    if (!filteredFiles.length) { showToast('삭제할 검색 결과가 없습니다', 'error'); return; }
+    const query = (document.getElementById('file-search')?.value || '').trim();
+    if (!query) { showToast('먼저 삭제할 파일을 검색하세요', 'error'); return; }
+    const paths = filteredFiles.filter(f => !f.is_recording).map(f => f.relative_path);
+    if (!paths.length) { showToast('검색 결과가 모두 녹음 중인 파일입니다', 'error'); return; }
+    if (!confirm(`검색어 "${query}"에 해당하는 ${paths.length}개 파일을 모두 삭제하시겠습니까?`)) return;
+    await deletePaths(paths);
+}
+
+async function deletePaths(paths) {
+    try {
+        const data = await api('/api/files', {
+            method: 'DELETE',
+            body: JSON.stringify({ paths }),
+        });
+        const type = data.errors?.length ? 'error' : 'success';
+        showToast(`${data.deleted.length}개 삭제 완료${data.errors?.length ? ` · ${data.errors.length}개 실패` : ''}`, type);
+        await loadFiles();
+    } catch (e) {
+        showToast(`삭제 실패: ${e.message}`, 'error');
+    }
 }
 
 function toggleFileSelect(path) {
@@ -1018,11 +1092,11 @@ function toggleFileSelect(path) {
 function toggleSelectAll() {
     const allChecked = document.getElementById('select-all-files').checked;
     if (allChecked) {
-        allFiles.forEach(f => selectedFiles.add(f.relative_path));
+        filteredFiles.filter(f => !f.is_recording).forEach(f => selectedFiles.add(f.relative_path));
     } else {
         selectedFiles.clear();
     }
-    renderFiles(allFiles);
+    renderFiles(filteredFiles);
     updateBulkBar();
 }
 
@@ -1050,16 +1124,7 @@ async function deleteFile(path) {
 async function deleteSelectedFiles() {
     if (!selectedFiles.size) { showToast('파일을 선택하세요', 'error'); return; }
     if (!confirm(`${selectedFiles.size}개 파일을 삭제하시겠습니까?`)) return;
-    try {
-        const data = await api('/api/files', {
-            method: 'DELETE',
-            body: JSON.stringify({ paths: [...selectedFiles] }),
-        });
-        showToast(`${data.deleted.length}개 삭제 완료`, 'success');
-        loadFiles();
-    } catch (e) {
-        showToast('삭제 실패', 'error');
-    }
+    await deletePaths([...selectedFiles]);
 }
 
 // =============================================

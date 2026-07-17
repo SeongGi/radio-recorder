@@ -4,15 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>Radio Recorder - 로그인</title>
+    <meta name="theme-color" content="#2563eb">
+    <script>document.documentElement.dataset.theme=localStorage.getItem('radio-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root { --bg:#f4f7fb; --card:rgba(255,255,255,.9); --text:#0f172a; --muted:#64748b; --border:rgba(15,23,42,.1); --shadow:rgba(15,23,42,.12); color-scheme:light; }
+        :root[data-theme="dark"] { --bg:#08111f; --card:rgba(15,23,42,.88); --text:#f8fafc; --muted:#94a3b8; --border:rgba(255,255,255,.08); --shadow:rgba(0,0,0,.4); color-scheme:dark; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Inter', -apple-system, sans-serif;
-            background: #0a0a0f;
-            color: #e0e0e0;
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -40,17 +44,17 @@
         }
 
         .wave:nth-child(1) {
-            background: linear-gradient(135deg, #4a9eff, #7c3aed);
+            background: linear-gradient(135deg, #2563eb, #60a5fa);
             animation: wave-rotate 20s linear infinite;
             transform: translate(-50%, -50%);
         }
         .wave:nth-child(2) {
-            background: linear-gradient(135deg, #7c3aed, #ec4899);
+            background: linear-gradient(135deg, #1d4ed8, #38bdf8);
             animation: wave-rotate 25s linear infinite reverse;
             transform: translate(-50%, -50%);
         }
         .wave:nth-child(3) {
-            background: linear-gradient(135deg, #ec4899, #4a9eff);
+            background: linear-gradient(135deg, #0ea5e9, #2563eb);
             animation: wave-rotate 30s linear infinite;
             transform: translate(-50%, -50%);
         }
@@ -67,15 +71,15 @@
             width: 100%;
             max-width: 420px;
             padding: 48px 40px;
-            background: rgba(18, 18, 28, 0.85);
+            background: var(--card);
             backdrop-filter: blur(40px);
             -webkit-backdrop-filter: blur(40px);
-            border: 1px solid rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
             border-radius: 24px;
             text-align: center;
             box-shadow:
                 0 0 80px rgba(74, 158, 255, 0.06),
-                0 32px 64px rgba(0, 0, 0, 0.4);
+                0 32px 64px var(--shadow);
         }
 
         .logo {
@@ -92,7 +96,7 @@
         h1 {
             font-size: 28px;
             font-weight: 700;
-            background: linear-gradient(135deg, #4a9eff, #7c3aed);
+            background: linear-gradient(135deg, #2563eb, #60a5fa);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -101,7 +105,7 @@
 
         .subtitle {
             font-size: 14px;
-            color: #666;
+            color: var(--muted);
             margin-bottom: 40px;
             letter-spacing: 0.5px;
         }
@@ -118,7 +122,7 @@
 
         .waveform .bar {
             width: 3px;
-            background: linear-gradient(to top, #4a9eff, #7c3aed);
+            background: linear-gradient(to top, #2563eb, #60a5fa);
             border-radius: 2px;
             animation: wave-bar 1.2s ease-in-out infinite;
         }
@@ -164,7 +168,7 @@
         .footer {
             margin-top: 40px;
             font-size: 12px;
-            color: #444;
+            color: var(--muted);
         }
 
         /* 방송국 아이콘 */
@@ -186,6 +190,8 @@
         .station-badge.kbs { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
         .station-badge.mbc { background: rgba(16, 185, 129, 0.15); color: #34d399; }
         .station-badge.sbs { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+
+        .theme-button { position:fixed; top:20px; right:20px; z-index:3; width:40px; height:40px; border-radius:50%; border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer; font-size:17px; }
 
         @media (max-width: 480px) {
             .login-card {
@@ -217,6 +223,7 @@
     </style>
 </head>
 <body>
+    <button class="theme-button" id="theme-button" onclick="toggleLoginTheme()" aria-label="테마 전환">◐</button>
     <div class="bg-waves">
         <div class="wave"></div>
         <div class="wave"></div>
@@ -252,6 +259,9 @@
     </div>
 
     <script>
+        function updateLoginTheme() { document.getElementById('theme-button').textContent = document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'; }
+        function toggleLoginTheme() { const next=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=next; localStorage.setItem('radio-theme',next); updateLoginTheme(); }
+        updateLoginTheme();
         // 파형 애니메이션 바 생성
         const waveform = document.getElementById('waveform');
         for (let i = 0; i < 24; i++) {

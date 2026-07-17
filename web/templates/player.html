@@ -4,17 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <title>{{ meta.filename.split('/')[-1] if '/' in meta.filename else meta.filename.split('\\')[-1] }} - Radio Recorder</title>
+    <meta name="theme-color" content="#2563eb">
+    <script>document.documentElement.dataset.theme=localStorage.getItem('radio-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
     <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
     <style>
         :root {
-            --bg-base: #0f172a;
-            --bg-card: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --accent: #3b82f6;
-            --accent-hover: #2563eb;
+            --bg-base: #f4f7fb;
+            --bg-card: #ffffff;
+            --bg-control: #eaf0f8;
+            --border: #d8e1ee;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
             --radius-xl: 16px;
+            color-scheme: light;
         }
+        :root[data-theme="dark"] { --bg-base:#08111f; --bg-card:#111c2e; --bg-control:#1e293b; --border:#334155; --text-main:#f8fafc; --text-muted:#94a3b8; color-scheme:dark; }
 
         body {
             font-family: 'Inter', -apple-system, sans-serif;
@@ -45,7 +51,7 @@
             align-items: center;
             width: 80px;
             height: 80px;
-            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            background: linear-gradient(135deg, var(--accent), #60a5fa);
             border-radius: 50%;
             margin-bottom: 24px;
             box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.5);
@@ -107,7 +113,7 @@
             padding: 10px 20px;
             background-color: transparent;
             color: var(--text-muted);
-            border: 1px solid #334155;
+            border: 1px solid var(--border);
             border-radius: 8px;
             text-decoration: none;
             font-size: 14px;
@@ -117,7 +123,7 @@
         }
 
         .btn-back:hover {
-            background-color: #334155;
+            background-color: var(--bg-control);
             color: var(--text-main);
         }
 
@@ -130,8 +136,8 @@
         }
 
         .btn-control {
-            background-color: #1e293b;
-            border: 1px solid #334155;
+            background-color: var(--bg-control);
+            border: 1px solid var(--border);
             color: var(--text-main);
             border-radius: 50%;
             width: 44px;
@@ -148,11 +154,12 @@
         }
 
         .btn-control:hover {
-            background-color: #334155;
+            background-color: var(--bg-control);
             border-color: var(--accent);
             color: #60a5fa;
             transform: scale(1.08);
         }
+        .theme-button { position:fixed; top:20px; right:20px; width:40px; height:40px; border-radius:50%; border:1px solid var(--border); background:var(--bg-card); color:var(--text-main); cursor:pointer; font-size:17px; }
 
         .btn-control:active {
             transform: scale(0.92);
@@ -187,6 +194,7 @@
     </style>
 </head>
 <body>
+<button class="theme-button" id="theme-button" onclick="togglePlayerTheme()" aria-label="테마 전환">◐</button>
 
 <div class="player-container">
     <div class="icon-wrapper">
@@ -251,6 +259,9 @@
 </div>
 
 <script>
+    function updatePlayerTheme() { document.getElementById('theme-button').textContent = document.documentElement.dataset.theme === 'dark' ? '☀️' : '🌙'; }
+    function togglePlayerTheme() { const next=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=next; localStorage.setItem('radio-theme',next); updatePlayerTheme(); }
+    updatePlayerTheme();
     const audio = document.getElementById('player-audio');
     let seekInterval = null;
     let longPressTimeout = null;
