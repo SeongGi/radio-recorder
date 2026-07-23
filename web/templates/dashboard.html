@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script>document.documentElement.dataset.theme=localStorage.getItem('radio-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
-    <link rel="stylesheet" href="/static/style.css?v=1.3.0">
+    <link rel="stylesheet" href="/static/style.css?v=1.4.0">
 </head>
 <body>
     <!-- 헤더 -->
@@ -44,6 +44,7 @@
                 <span></span><span></span><span></span><span></span><span></span>
             </div>
             <audio id="live-audio" preload="none"></audio>
+            <audio id="live-audio-standby" preload="none"></audio>
             <button class="live-control-btn" onclick="playPrevStation()" title="이전 방송">
                 <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
                     <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>
@@ -373,6 +374,6 @@
     <div class="toast-container" id="toast-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
-    <script src="/static/app.js?v=1.3.0"></script>
+    <script src="/static/app.js?v=1.4.0"></script>
 </body>
 </html>

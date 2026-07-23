@@ -17,6 +17,9 @@ let liveCurrentStation = null;
 let liveIsPlaying = false;
 let stationIdsOrdered = [];
 let hlsInstance = null;
+let activeLiveAudio = null;
+let standbyLiveAudio = null;
+let _switchSequence = 0;
 let liveRetryCount = 0; // 스트림 실패 재시도 횟수
 const MAX_LIVE_RETRIES = 3; // 최대 재시도 횟수
 
@@ -199,33 +202,85 @@ let _switchingStation = false;
 // HLS 일시정지 후 재개용 URL
 let _lastHlsUrl = null;
 
-async function playLive(stationId, stationName, netClass) {
-    const audio = document.getElementById('live-audio');
+function getLiveAudio() {
+    return activeLiveAudio || document.getElementById('live-audio');
+}
+
+function resetAudioElement(audio) {
+    if (!audio) return;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+}
+
+function stageLiveStream(audio, streamUrl, stationId) {
+    return new Promise((resolve, reject) => {
+        let stagedHls = null;
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            resolve(stagedHls);
+        };
+        const fail = (error) => {
+            if (settled) return;
+            settled = true;
+            if (stagedHls) stagedHls.destroy();
+            resetAudioElement(audio);
+            reject(error);
+        };
+
+        audio.addEventListener('playing', finish, { once: true });
+
+        if (Hls.isSupported() && streamUrl.includes('.m3u8')) {
+            stagedHls = new Hls({
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 60,
+            });
+            stagedHls.loadSource(streamUrl);
+            stagedHls.attachMedia(audio);
+            stagedHls.on(Hls.Events.MANIFEST_PARSED, () => {
+                if (liveCurrentStation !== stationId) {
+                    fail(new Error('다른 채널로 전환됨'));
+                    return;
+                }
+                audio.play().catch(fail);
+            });
+            stagedHls.on(Hls.Events.ERROR, (_event, data) => {
+                if (data.fatal) fail(new Error(data.details || 'HLS 연결 실패'));
+            });
+        } else {
+            audio.src = streamUrl;
+            audio.load();
+            audio.play().catch(fail);
+        }
+    });
+}
+
+async function playLive(stationId, stationName, netClass, forceReconnect = false) {
+    const previousAudio = getLiveAudio();
+    const previousHls = hlsInstance;
+    const sequence = ++_switchSequence;
 
     // 같은 방송국 클릭 → 토글
-    if (liveCurrentStation === stationId && !_switchingStation) {
+    if (liveCurrentStation === stationId && !_switchingStation && !forceReconnect) {
         toggleLivePlay();
         return;
     }
 
     // 전환 시작
     _switchingStation = true;
+    if ('mediaSession' in navigator && !previousAudio.paused) {
+        navigator.mediaSession.playbackState = 'playing';
+    }
     liveRetryCount = 0; // 새 방송국 시작 시 재시도 횟수 초기화
     console.log('[Player] playLive:', stationId, stationName);
 
     try {
         showToast(`${stationName} 연결 중...`, 'info');
 
-        // 이전 HLS 인스턴스 완전 정리
-        if (hlsInstance) {
-            try { hlsInstance.destroy(); } catch (e) { /* ignore */ }
-            hlsInstance = null;
-        }
-        audio.pause();
-        audio.removeAttribute('src');
-        audio.load();
-
-        // 상태 즉시 업데이트
+        // 기존 채널은 새 채널이 실제 재생될 때까지 유지한다.
         liveCurrentStation = stationId;
         _lastHlsUrl = null;
 
@@ -253,49 +308,25 @@ async function playLive(stationId, stationName, netClass) {
         const streamUrl = data.url;
         console.log('[Player] Got stream URL:', streamUrl.substring(0, 80));
 
-        if (Hls.isSupported() && streamUrl.includes('.m3u8')) {
-            // HLS 스트림
-            _lastHlsUrl = streamUrl;
-            hlsInstance = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-                backBufferLength: 60,
-            });
-            hlsInstance.loadSource(streamUrl);
-            hlsInstance.attachMedia(audio);
-            hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-                if (liveCurrentStation !== stationId) return;
-                audio.play().catch(e => console.error('[Player] HLS play error:', e));
-            });
-            hlsInstance.on(Hls.Events.ERROR, (event, errData) => {
-                if (errData.fatal) {
-                    console.error('[Player] HLS fatal:', errData.type, errData.details);
-                    
-                    if (liveRetryCount < MAX_LIVE_RETRIES) {
-                        liveRetryCount++;
-                        console.log(`[Player] Retrying... (${liveRetryCount}/${MAX_LIVE_RETRIES})`);
-                        
-                        if (errData.type === Hls.ErrorTypes.MEDIA_ERROR) {
-                            try { hlsInstance.recoverMediaError(); } catch (e) { /* ignore */ }
-                        } else if (errData.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            setTimeout(() => { if (hlsInstance) hlsInstance.startLoad(); }, 2000);
-                        }
-                    } else {
-                        console.warn('[Player] Max retries reached. Skipping to next station.');
-                        showToast(`연결 실패: ${stationName}. 다음 방송으로 넘어갑니다.`, 'warning');
-                        setTimeout(() => playNextStation(), 1000);
-                    }
-                }
-            });
-        } else {
-            // MP3 직접 스트림
-            audio.src = streamUrl;
-            audio.load();
-            audio.play().catch(e => {
-                console.error('[Player] Direct play error:', e);
-                handleStreamError(stationId, stationName);
-            });
+        const nextAudio = standbyLiveAudio;
+        resetAudioElement(nextAudio);
+        const nextHls = await stageLiveStream(nextAudio, streamUrl, stationId);
+
+        if (sequence !== _switchSequence || liveCurrentStation !== stationId) {
+            if (nextHls) nextHls.destroy();
+            resetAudioElement(nextAudio);
+            return;
         }
+
+        // 새 채널이 playing 상태가 된 다음에만 이전 채널을 종료한다.
+        activeLiveAudio = nextAudio;
+        standbyLiveAudio = previousAudio;
+        hlsInstance = nextHls;
+        _lastHlsUrl = streamUrl;
+        if (previousHls) {
+            try { previousHls.destroy(); } catch (e) { /* ignore */ }
+        }
+        resetAudioElement(previousAudio);
 
         // 성공 UI
         liveIsPlaying = true;
@@ -308,6 +339,7 @@ async function playLive(stationId, stationName, netClass) {
         showToast(`🎵 ${stationName} 재생 중`, 'success');
 
     } catch (e) {
+        if (sequence !== _switchSequence) return;
         console.error('[Player] playLive error:', e);
         handleStreamError(stationId, stationName);
     } finally {
@@ -328,7 +360,7 @@ function handleStreamError(stationId, stationName) {
             if (liveCurrentStation === stationId) {
                 const s = stations[stationId];
                 if (s) {
-                    playLive(stationId, stationName, (s.network || 'OTHER').toLowerCase());
+                    playLive(stationId, stationName, (s.network || 'OTHER').toLowerCase(), true);
                 }
             }
         }, 3000);
@@ -345,7 +377,7 @@ function handleStreamError(stationId, stationName) {
 }
 
 function toggleLivePlay() {
-    const audio = document.getElementById('live-audio');
+    const audio = getLiveAudio();
     if (!liveCurrentStation) return;
 
     console.log('[Player] toggleLivePlay, paused:', audio.paused, 'hls:', !!hlsInstance);
@@ -359,6 +391,7 @@ function toggleLivePlay() {
         }
         audio.pause();
         liveIsPlaying = false;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         updatePlayerUI(false);
         if (liveCurrentStation) {
             const btn = document.getElementById(`live-action-${liveCurrentStation}`);
@@ -373,6 +406,7 @@ function toggleLivePlay() {
         }
         audio.play().catch(e => console.error('[Player] Resume error:', e));
         liveIsPlaying = true;
+        if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         updatePlayerUI(true);
         if (liveCurrentStation) {
             const btn = document.getElementById(`live-action-${liveCurrentStation}`);
@@ -388,7 +422,7 @@ function stopLive() {
         return;
     }
 
-    const audio = document.getElementById('live-audio');
+    const audio = getLiveAudio();
     if (hlsInstance) {
         try { hlsInstance.destroy(); } catch (e) { /* ignore */ }
         hlsInstance = null;
@@ -396,7 +430,9 @@ function stopLive() {
     audio.pause();
     audio.removeAttribute('src');
     audio.load();
+    resetAudioElement(standbyLiveAudio);
     liveIsPlaying = false;
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
     liveCurrentStation = null;
     _lastHlsUrl = null;
 
@@ -512,10 +548,15 @@ function playPrevStation() {
 
 // audio 이벤트 (UI 동기화)
 document.addEventListener('DOMContentLoaded', () => {
-    const audio = document.getElementById('live-audio');
-    if (!audio) return;
+    activeLiveAudio = document.getElementById('live-audio');
+    standbyLiveAudio = document.getElementById('live-audio-standby');
+    [activeLiveAudio, standbyLiveAudio].forEach(bindLiveAudioEvents);
+});
 
+function bindLiveAudioEvents(audio) {
+    if (!audio) return;
     audio.addEventListener('playing', () => {
+        if (audio !== getLiveAudio() && !_switchingStation) return;
         console.log('[Audio] playing event');
         liveIsPlaying = true;
         updatePlayerUI(true);
@@ -526,6 +567,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     audio.addEventListener('pause', () => {
+        if (audio !== getLiveAudio()) return;
         console.log('[Audio] pause event, switching:', _switchingStation);
         if (_switchingStation) return; // 전환 중 무시
         liveIsPlaying = false;
@@ -537,6 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     audio.addEventListener('error', (e) => {
+        if (audio !== getLiveAudio()) return;
         console.error('[Audio] error event:', e);
         if (_switchingStation) return; // 전환 중 무시
         if (liveCurrentStation) {
@@ -544,7 +587,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stopLive();
         }
     });
-});
+}
 
 // =============================================
 // 방송국
